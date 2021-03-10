@@ -10,6 +10,7 @@
 #include <cassert>
 #include <iostream>
 
+using namespace std;
 // La classe Matrix est dérivée de std::valarray. Cette dernière est
 // similaire à std::vector, sauf qu'elle alloue exactement la quantité
 // de mémoire nécessaire (au lieu de 2^n dans std::vector) et qu'elle
@@ -20,17 +21,12 @@ class Matrix  {
 public:
 
     // Construire matrice iRows x iCols et initialiser avec des 0.
-    Matrix(std::size_t iRows, std::size_t iCols) : mData(0., iRows*iCols), mRows(iRows), mCols(iCols) {}
+    Matrix(size_t iRows, size_t iCols) : mRows(iRows), mCols(iCols), mData(0., iRows*iCols) {}
     
     // Affecter une matrice de même taille; s'assurer que les tailles sont identiques.
-    Matrix& operator=(const Matrix& iMat) {
-        assert(mRows == iMat.mRows && mCols == iMat.mCols);
-        mData = iMat.mData;
-        return *this;
-    }
 
     // Accéder à la case (i, j) en lecture/écriture.
-    inline double& operator()(std::size_t iRow, std::size_t iCol) {
+    inline double& operator()(size_t iRow, size_t iCol) {
         return mData[(iRow*mCols)+iCol];
     }
     
@@ -40,52 +36,52 @@ public:
     }
 
     // Retourner le nombre de colonnes.
-    inline std::size_t cols(void) const { return mCols; }
+    [[nodiscard]] inline size_t cols() const { return mCols; }
     
     // Retourner le nombre de lignes.
-    inline std::size_t rows(void) const { return mRows; }
+    [[nodiscard]] inline size_t rows() const { return mRows; }
 
     // Retourner le tableau d'une colonne de la matrice.
-    std::valarray<double> getColumnCopy(size_t iCol) const {
+    [[nodiscard]] valarray<double> getColumnCopy(size_t iCol) const {
         assert(iCol < mCols);
-        return mData[std::slice(iCol, mRows, mCols)];
+        return mData[slice(iCol, mRows, mCols)];
     }
     
     // Retourner la slice d'une colonne de la matrice.
-    std::slice_array<double> getColumnSlice(size_t iCol) {
+    slice_array<double> getColumnSlice(size_t iCol) {
         assert(iCol < mCols);
-        return mData[std::slice(iCol, mRows, mCols)];
+        return mData[slice(iCol, mRows, mCols)];
     }
     
     // Retourner la slice d'une colonne de la matrice.
-    const std::slice_array<double> getColumnSlice(size_t iCol) const {
+    [[nodiscard]] slice_array<double> getColumnSlice(size_t iCol) const {
         assert(iCol < mCols);
-        return const_cast<Matrix*>(this)->mData[std::slice(iCol, mRows, mCols)];
+        return const_cast<Matrix*>(this)->mData[slice(iCol, mRows, mCols)];
     }
    
     // Retourner le tableau d'une rangée de la matrice.
-    std::valarray<double> getRowCopy(size_t iRow) const {
+    [[nodiscard]] valarray<double> getRowCopy(size_t iRow) const {
         assert(iRow < mRows);
-        return mData[std::slice(iRow*mCols, mCols, 1)];
+        return mData[slice(iRow*mCols, mCols, 1)];
     }
     
     // Retourner la slice d'une rangée de la matrice.
-    std::slice_array<double> getRowSlice(size_t iRow) {
+    slice_array<double> getRowSlice(size_t iRow) {
         assert(iRow < mRows);
-        return mData[std::slice(iRow*mCols, mCols, 1)];
+        return mData[slice(iRow*mCols, mCols, 1)];
     }
     
     // Retourner la slice d'une rangée de la matrice.
-    const std::slice_array<double> getRowSlice(size_t iRow) const {
+    [[nodiscard]] slice_array<double> getRowSlice(size_t iRow) const {
         assert(iRow < mRows);
-        return const_cast<Matrix*>(this)->mData[std::slice(iRow*mCols, mCols, 1)];
+        return const_cast<Matrix*>(this)->mData[slice(iRow*mCols, mCols, 1)];
     }
     
     // Accéder au tableau interne de la matrice en lecture/écriture.
-    std::valarray<double>& getDataArray(void) { return mData; }
+    valarray<double>& getDataArray() { return mData; }
     
     // Accéder au tableau interne de la matrice en lecture seulement.
-    const std::valarray<double>& getDataArray(void) const { return mData; }
+    [[nodiscard]] const valarray<double>& getDataArray() const { return mData; }
    
     // Permuter deux rangées de la matrice.
     Matrix& swapRows(size_t iR1, size_t iR2);
@@ -95,19 +91,19 @@ public:
 
     // Représenter la matrice sous la forme d'une chaîne de caractères.
     // Pratique pour le débuggage...
-    std::string str(void) const;
+    [[nodiscard]] string str() const;
 
 protected:
     // Nombre de rangées et de colonnes.
-    std::size_t mRows, mCols;
-    std::valarray<double> mData;
+    size_t mRows, mCols;
+    valarray<double> mData;
 
 };
 
 // Construire une matrice identité.
 class MatrixIdentity : public Matrix {
 public:
-    MatrixIdentity(size_t iSize);
+    explicit MatrixIdentity(size_t iSize);
 };
 
 // Construire une matrice aléatoire [0,1) iRows x iCols.
@@ -130,6 +126,6 @@ public:
 };
 
 // Insérer une matrice dans un flot de sortie.
-std::ostream& operator<<(std::ostream& oStream, const Matrix& iMat);
+ostream& operator<<(ostream& oStream, const Matrix& iMat);
 
 #endif

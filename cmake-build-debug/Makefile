@@ -87,6 +87,17 @@ rebuild_cache/fast: rebuild_cache
 
 .PHONY : rebuild_cache/fast
 
+# Special rule for the target package
+package: preinstall
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Run CPack packaging tool..."
+	/opt/clion-2020.3.1/bin/cmake/linux/bin/cpack --config ./CPackConfig.cmake
+.PHONY : package
+
+# Special rule for the target package
+package/fast: package
+
+.PHONY : package/fast
+
 # Special rule for the target package_source
 package_source:
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Run CPack packaging tool for source..."
@@ -108,17 +119,6 @@ edit_cache:
 edit_cache/fast: edit_cache
 
 .PHONY : edit_cache/fast
-
-# Special rule for the target package
-package: preinstall
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Run CPack packaging tool..."
-	/opt/clion-2020.3.1/bin/cmake/linux/bin/cpack --config ./CPackConfig.cmake
-.PHONY : package
-
-# Special rule for the target package
-package/fast: package
-
-.PHONY : package/fast
 
 # The main all target
 all: cmake_check_build_system
@@ -153,17 +153,17 @@ depend:
 .PHONY : depend
 
 #=============================================================================
-# Target rules for targets named tp3
+# Target rules for targets named pp_tp3
 
 # Build rule for target.
-tp3: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tp3
-.PHONY : tp3
+pp_tp3: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 pp_tp3
+.PHONY : pp_tp3
 
 # fast build rule for target.
-tp3/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tp3.dir/build.make CMakeFiles/tp3.dir/build
-.PHONY : tp3/fast
+pp_tp3/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pp_tp3.dir/build.make CMakeFiles/pp_tp3.dir/build
+.PHONY : pp_tp3/fast
 
 Matrix.o: Matrix.cpp.o
 
@@ -171,7 +171,7 @@ Matrix.o: Matrix.cpp.o
 
 # target to build an object file
 Matrix.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tp3.dir/build.make CMakeFiles/tp3.dir/Matrix.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pp_tp3.dir/build.make CMakeFiles/pp_tp3.dir/Matrix.cpp.o
 .PHONY : Matrix.cpp.o
 
 Matrix.i: Matrix.cpp.i
@@ -180,7 +180,7 @@ Matrix.i: Matrix.cpp.i
 
 # target to preprocess a source file
 Matrix.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tp3.dir/build.make CMakeFiles/tp3.dir/Matrix.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pp_tp3.dir/build.make CMakeFiles/pp_tp3.dir/Matrix.cpp.i
 .PHONY : Matrix.cpp.i
 
 Matrix.s: Matrix.cpp.s
@@ -189,8 +189,35 @@ Matrix.s: Matrix.cpp.s
 
 # target to generate assembly for a file
 Matrix.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tp3.dir/build.make CMakeFiles/tp3.dir/Matrix.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pp_tp3.dir/build.make CMakeFiles/pp_tp3.dir/Matrix.cpp.s
 .PHONY : Matrix.cpp.s
+
+MpiUtils.o: MpiUtils.cpp.o
+
+.PHONY : MpiUtils.o
+
+# target to build an object file
+MpiUtils.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pp_tp3.dir/build.make CMakeFiles/pp_tp3.dir/MpiUtils.cpp.o
+.PHONY : MpiUtils.cpp.o
+
+MpiUtils.i: MpiUtils.cpp.i
+
+.PHONY : MpiUtils.i
+
+# target to preprocess a source file
+MpiUtils.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pp_tp3.dir/build.make CMakeFiles/pp_tp3.dir/MpiUtils.cpp.i
+.PHONY : MpiUtils.cpp.i
+
+MpiUtils.s: MpiUtils.cpp.s
+
+.PHONY : MpiUtils.s
+
+# target to generate assembly for a file
+MpiUtils.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pp_tp3.dir/build.make CMakeFiles/pp_tp3.dir/MpiUtils.cpp.s
+.PHONY : MpiUtils.cpp.s
 
 main.o: main.cpp.o
 
@@ -198,7 +225,7 @@ main.o: main.cpp.o
 
 # target to build an object file
 main.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tp3.dir/build.make CMakeFiles/tp3.dir/main.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pp_tp3.dir/build.make CMakeFiles/pp_tp3.dir/main.cpp.o
 .PHONY : main.cpp.o
 
 main.i: main.cpp.i
@@ -207,7 +234,7 @@ main.i: main.cpp.i
 
 # target to preprocess a source file
 main.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tp3.dir/build.make CMakeFiles/tp3.dir/main.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pp_tp3.dir/build.make CMakeFiles/pp_tp3.dir/main.cpp.i
 .PHONY : main.cpp.i
 
 main.s: main.cpp.s
@@ -216,7 +243,7 @@ main.s: main.cpp.s
 
 # target to generate assembly for a file
 main.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tp3.dir/build.make CMakeFiles/tp3.dir/main.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pp_tp3.dir/build.make CMakeFiles/pp_tp3.dir/main.cpp.s
 .PHONY : main.cpp.s
 
 # Help Target
@@ -229,10 +256,13 @@ help:
 	@echo "... package"
 	@echo "... package_source"
 	@echo "... rebuild_cache"
-	@echo "... tp3"
+	@echo "... pp_tp3"
 	@echo "... Matrix.o"
 	@echo "... Matrix.i"
 	@echo "... Matrix.s"
+	@echo "... MpiUtils.o"
+	@echo "... MpiUtils.i"
+	@echo "... MpiUtils.s"
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"

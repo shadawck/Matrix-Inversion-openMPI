@@ -3,11 +3,13 @@
 //
 
 #include "Matrix.hpp"
+#include "MpiUtils.h"
 
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
 #include <stdexcept>
+#include <openmpi/mpi.h>
 
 using namespace std;
 
@@ -50,8 +52,8 @@ void invertSequential(Matrix& iA) {
             if (i != k) { // ...différente de k
                 // On soustrait la rangée k
                 // multipliée par l'élément k de la rangée courante
-                double lValue = lAI(i, k);
-                lAI.getRowSlice(i) -= lAI.getRowCopy(k)*lValue;
+                double llValue = lAI(i, k);
+                lAI.getRowSlice(i) -= lAI.getRowCopy(k)*llValue;
             }
         }
     }
@@ -87,7 +89,7 @@ Matrix multiplyMatrix(const Matrix& iMat1, const Matrix& iMat2) {
 
 int main(int argc, char** argv) {
 
-    srand((unsigned)time(NULL));
+    srand((unsigned)time(nullptr));
 
     unsigned int lS = 5;
     if (argc == 2) {
@@ -105,6 +107,14 @@ int main(int argc, char** argv) {
     cout << "Produit des deux matrices:\n" << lRes.str() << endl;
 
     cout << "Erreur: " << lRes.getDataArray().sum() - lS << endl;
+
+
+    MpiUtils::initMpi();
+
+    MpiUtils::rank();
+    MpiUtils::processorName();
+
+    MpiUtils::cleanup();
 
     return 0;
 }
