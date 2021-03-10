@@ -1,1 +1,5 @@
-tp3/build/
+cmake-build-debug/
+cmake-build-release/
+.idea/
+*.cbp
+CMakeFiles/
