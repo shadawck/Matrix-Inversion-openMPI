@@ -3,11 +3,18 @@
 
 using namespace std;
 
-void Matrix::printValArray(const valarray<double>& array) {
+void Matrix::printValArray(const valarray<double> &array) {
     for (double elem : array) {
         cout << elem << ", ";
     }
     cout << endl << endl;
+}
+
+void Matrix::printArray(double arr[], int size) {
+    for (int i = 0; i < size; i++) {
+            cout << arr[i] << ", ";
+    }
+    cout << endl;
 }
 
 // Permuter deux rangées de la matrice.
@@ -52,6 +59,7 @@ string Matrix::str(void) const {
     }
     return oss.str();
 }
+
 // Construire une matrice identité.
 MatrixIdentity::MatrixIdentity(size_t iSize) : Matrix(iSize, iSize) {
     for (size_t i = 0; i < iSize; ++i) {

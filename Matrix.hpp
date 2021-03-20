@@ -95,6 +95,7 @@ public:
     [[nodiscard]] string str() const;
 
     static void printValArray(const valarray<double> &);
+    static void printArray(double *, int size);
 
 protected:
     // Nombre de rangées et de colonnes.

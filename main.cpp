@@ -92,59 +92,30 @@ void invertParallel(Matrix &mat) { // Number of row staw matrixDimension but for
     MPI_Comm_size(MPI_COMM_WORLD, &nbProcess);
 
     int rowByProcess = rowSize / nbProcess;
-    cout << "Row By process: " << rowByProcess << endl;
+//    cout << "Row By process: " << rowByProcess << endl;
 
-    /// Our root process is the process 0
-    /// Only the process 0 contains the full matrix (OPTIMISATION)
-    cout << "PRINT AUGMENTED MATRIX" << endl;
-    cout << augmentedMatrix.str() << endl;
-
-    double *sendarray = convertValArrayToDouble(augmentedMatrix.getDataArray());
-    double recvarray[rowByProcess*colSize];
-
-    MPI_Scatter(sendarray, rowByProcess*colSize, MPI_DOUBLE,
-                recvarray, rowByProcess*colSize, MPI_DOUBLE, ROOT_PROCESS,
-                MPI_COMM_WORLD);
-
-    if (rank == 1) {
-        cout << "rank: " << rank << " " << "array : " << recvarray[0] << endl;
+    if (rank == 0) {
+        cout << "PRINT AUGMENTED MATRIX" << endl;
+        cout << augmentedMatrix.str() << endl;
     }
 
-//    /**
-//     * Gaussian elimination
-//     */
-//    double chronoStart;
-//
-//    valarray<double> row(0);
-//
-//    if (rank == 0) chronoStart = MPI_Wtime();
-//
-//    int pivot;
-//    double scale;
-//    int column;
-//    int firstRow;
-//
-//    /// Receiver (receive matrix row)
-//
-//    firstRow = rank * rowByProcess;
-//    for (int i = 0; i < firstRow; i++) {
-//        MPI_Bcast(&row, rowSize, MPI_DOUBLE, i / rowByProcess, MPI_COMM_WORLD);
-//
-//        for (int j = 0; j < rowByProcess; j++) {
-//            scale = processArray[j * rowSize + 1];
-//
-//            for (int k = i + 1; k < rowSize; k++) {
-//                processArray[j * rowSize + k] -= scale * row[k];
-//            }
-//            processArray[j * rowSize + i] = 0;
-//        }
-//    }
+    double *sendarray = convertValArrayToDouble(augmentedMatrix.getDataArray());
+    double recvarray[rowByProcess * colSize];
+
+    MPI_Scatter(sendarray, rowByProcess * colSize, MPI_DOUBLE,
+                recvarray, rowByProcess * colSize, MPI_DOUBLE, ROOT_PROCESS,
+                MPI_COMM_WORLD);
+
+    cout << "Array for rank : " << rank << endl;
+    int size = sizeof(recvarray)/sizeof(recvarray[0]);
+    Matrix::printArray(recvarray, size);
+
 }
 
 double *convertValArrayToDouble(valarray<double> array) {// This is how you can get a dynamic array from a valarray.
-    double *sendarray = new double[array.size()];
-    copy(begin(array), end(array), sendarray);
-    return sendarray;
+    auto *newArray = new double[array.size()];
+    copy(begin(array), end(array), newArray);
+    return newArray;
 }
 
 // Multiplier deux matrices.
@@ -169,7 +140,7 @@ int main(int argc, char **argv) {
     }
 
     MatrixRandom lA(matrixDimension, matrixDimension);
-    cout << "Matrice random:\n" << lA.str() << endl;
+//    cout << "Matrice random:\n" << lA.str() << endl;
 
     Matrix lB(lA);
 //    invertSequential(lB);
