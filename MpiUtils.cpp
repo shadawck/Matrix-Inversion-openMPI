@@ -2,25 +2,24 @@
 // Created by shadawck on 3/10/21.
 //
 
-#include "MpiUtils.h"
+#include "MpiUtils.hpp"
 #include <iostream>
 #include <openmpi/mpi.h>
 
 using namespace std;
 
-int MpiUtils::initMpi() {
-    MPI_Init(nullptr, nullptr);
-    int world_size;
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-    cout << "Proc Number : " << world_size << endl;
-    return world_size;
+void MpiUtils::initMpi(int argc, char *argv[]) {
+    MPI_Init(&argc, &argv);
 }
 
-int MpiUtils::rank() {
-    int world_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-    cout << "Rank : " << world_rank << endl;
-    return world_rank;
+void MpiUtils::totalSize(int size){
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    cout << "Proc Number : " << size << endl;
+}
+
+void MpiUtils::rank(int rank) {
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    cout << "Rank : " << rank << endl;
 }
 
 void MpiUtils::processorName() {
@@ -33,3 +32,4 @@ void MpiUtils::processorName() {
 void MpiUtils::cleanup() {
     MPI_Finalize();
 }
+

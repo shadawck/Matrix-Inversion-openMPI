@@ -1,121 +1,191 @@
-//
-//  main.cpp
-//
-
 #include "Matrix.hpp"
-#include "MpiUtils.h"
+#include "MpiUtils.hpp"
 
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
 #include <stdexcept>
 #include <openmpi/mpi.h>
+#include <unistd.h>
+
+void findPivot(size_t row, MatrixConcatCols &augmentedMatrix, size_t &pivot);
+
+void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t row, size_t pivot);
+
 
 using namespace std;
+int ROOT_PROCESS = 0;
 
-// Inverser la matrice par la méthode de Gauss-Jordan; implantation séquentielle.
-void invertSequential(Matrix& iA) {
-
-    // vérifier que la matrice est carrée
-    assert(iA.rows() == iA.cols());
-    // construire la matrice [A I]
-    MatrixConcatCols lAI(iA, MatrixIdentity(iA.rows()));
+/**
+ * Inverser la matrice par la méthode de Gauss-Jordan; implantation séquentielle.
+ * @param mat
+ */
+void invertSequential(Matrix &mat) {
+    assert(mat.rows() == mat.cols());
+    MatrixConcatCols augmentedMatrix(mat, MatrixIdentity(mat.rows()));
 
     // traiter chaque rangée
-    for (size_t k=0; k<iA.rows(); ++k) {
-        // trouver l'index p du plus grand pivot de la colonne k en valeur absolue
-        // (pour une meilleure stabilité numérique).
-        size_t p = k;
-        double lMax = fabs(lAI(k,k));
-        for(size_t i = k; i < lAI.rows(); ++i) {
-            if(fabs(lAI(i,k)) > lMax) {
-                lMax = fabs(lAI(i,k));
-                p = i;
-            }
-        }
-        // vérifier que la matrice n'est pas singulière
-        if (lAI(p, k) == 0) throw runtime_error("Matrix not invertible");
+    for (size_t row = 0; row < mat.rows(); ++row) {
+
+        size_t pivot;
+        findPivot(row, augmentedMatrix, pivot);
+        checkSingularity(augmentedMatrix, row, pivot);
 
         // échanger la ligne courante avec celle du pivot
-        if (p != k) lAI.swapRows(p, k);
+        if (pivot != row) augmentedMatrix.swapRows(pivot, row);
 
-        double lValue = lAI(k, k);
-        for (size_t j=0; j<lAI.cols(); ++j) {
-            // On divise les éléments de la rangée k
-            // par la valeur du pivot.
-            // Ainsi, lAI(k,k) deviendra égal à 1.
-            lAI(k, j) /= lValue;
+        double pivotValue = augmentedMatrix(row, row);
+
+        for (size_t col = 0; col < augmentedMatrix.cols(); ++col) {
+            // On divise les éléments de la rangée row par la valeur du pivot.
+            // Ainsi, augmentedMatrix(row,row) deviendra égal à 1.
+            augmentedMatrix(row, col) /= pivotValue;
         }
 
         // Pour chaque rangée...
-        for (size_t i=0; i<lAI.rows(); ++i) {
-            if (i != k) { // ...différente de k
-                // On soustrait la rangée k
-                // multipliée par l'élément k de la rangée courante
-                double llValue = lAI(i, k);
-                lAI.getRowSlice(i) -= lAI.getRowCopy(k)*llValue;
+        for (size_t i = 0; i < augmentedMatrix.rows(); ++i) {
+            if (i != row) { // ...différente de row
+                double llValue = augmentedMatrix(i, row);
+                // On soustrait la rangée row multipliée par l'élément row de la rangée courante
+                augmentedMatrix.getRowSlice(i) -= augmentedMatrix.getRowCopy(row) * llValue;
             }
         }
     }
-
-    // On copie la partie droite de la matrice AI ainsi transformée
-    // dans la matrice courante (this).
-    for (unsigned int i=0; i<iA.rows(); ++i) {
-        iA.getRowSlice(i) = lAI.getDataArray()[slice(i*lAI.cols()+iA.cols(), iA.cols(), 1)];
+    // On copie la partie droite de la matrice AI ainsi transformée dans la matrice courante (this).
+    for (unsigned int i = 0; i < mat.rows(); ++i) {
+        mat.getRowSlice(i) = augmentedMatrix.getDataArray()[slice(i * augmentedMatrix.cols() + mat.cols(), mat.cols(),
+                                                                  1)];
     }
 }
 
-// Inverser la matrice par la méthode de Gauss-Jordan; implantation MPI parallèle.
-void invertParallel(Matrix& iA) {
-    // vous devez coder cette fonction
+void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t row, size_t pivot) {
+    if (augmentedMatrix(pivot, row) == 0) throw runtime_error("Matrix not invertible");
+}
+
+double *convertValArrayToDouble(valarray<double> array);
+
+void findPivot(size_t row, MatrixConcatCols &augmentedMatrix, size_t &pivot) {
+    pivot = row;
+    double lMax = fabs(augmentedMatrix(row, row));
+    for (size_t i = row; i < augmentedMatrix.rows(); ++i) {
+        if (fabs(augmentedMatrix(i, row)) > lMax) {
+            lMax = fabs(augmentedMatrix(i, row));
+            pivot = i;
+        }
+    }
+}
+
+/** NAIVE IMPLEMENTATION
+ * Inverser la matrice par la méthode de Gauss-Jordan; implantation MPI parallèle.
+ * @param mat
+ */
+void invertParallel(Matrix &mat) { // Number of row staw matrixDimension but for augmentedMatrix col number change
+    int rank, nbProcess;
+
+    assert(mat.rows() == mat.cols());
+    MatrixConcatCols augmentedMatrix(mat, MatrixIdentity(mat.rows()));
+
+    int rowSize = augmentedMatrix.rows();
+    int colSize = augmentedMatrix.cols();
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &nbProcess);
+
+    int rowByProcess = rowSize / nbProcess;
+    cout << "Row By process: " << rowByProcess << endl;
+
+    /// Our root process is the process 0
+    /// Only the process 0 contains the full matrix (OPTIMISATION)
+    cout << "PRINT AUGMENTED MATRIX" << endl;
+    cout << augmentedMatrix.str() << endl;
+
+    double *sendarray = convertValArrayToDouble(augmentedMatrix.getDataArray());
+    double recvarray[rowByProcess*colSize];
+
+    MPI_Scatter(sendarray, rowByProcess*colSize, MPI_DOUBLE,
+                recvarray, rowByProcess*colSize, MPI_DOUBLE, ROOT_PROCESS,
+                MPI_COMM_WORLD);
+
+    if (rank == 1) {
+        cout << "rank: " << rank << " " << "array : " << recvarray[0] << endl;
+    }
+
+//    /**
+//     * Gaussian elimination
+//     */
+//    double chronoStart;
+//
+//    valarray<double> row(0);
+//
+//    if (rank == 0) chronoStart = MPI_Wtime();
+//
+//    int pivot;
+//    double scale;
+//    int column;
+//    int firstRow;
+//
+//    /// Receiver (receive matrix row)
+//
+//    firstRow = rank * rowByProcess;
+//    for (int i = 0; i < firstRow; i++) {
+//        MPI_Bcast(&row, rowSize, MPI_DOUBLE, i / rowByProcess, MPI_COMM_WORLD);
+//
+//        for (int j = 0; j < rowByProcess; j++) {
+//            scale = processArray[j * rowSize + 1];
+//
+//            for (int k = i + 1; k < rowSize; k++) {
+//                processArray[j * rowSize + k] -= scale * row[k];
+//            }
+//            processArray[j * rowSize + i] = 0;
+//        }
+//    }
+}
+
+double *convertValArrayToDouble(valarray<double> array) {// This is how you can get a dynamic array from a valarray.
+    double *sendarray = new double[array.size()];
+    copy(begin(array), end(array), sendarray);
+    return sendarray;
 }
 
 // Multiplier deux matrices.
-Matrix multiplyMatrix(const Matrix& iMat1, const Matrix& iMat2) {
-
-    // vérifier la compatibilité des matrices
+Matrix multiplyMatrix(const Matrix &iMat1, const Matrix &iMat2) {
     assert(iMat1.cols() == iMat2.rows());
-    // effectuer le produit matriciel
     Matrix lRes(iMat1.rows(), iMat2.cols());
-    // traiter chaque rangée
-    for(size_t i=0; i < lRes.rows(); ++i) {
-        // traiter chaque colonne
-        for(size_t j=0; j < lRes.cols(); ++j) {
-            lRes(i,j) = (iMat1.getRowCopy(i)*iMat2.getColumnCopy(j)).sum();
+    for (size_t i = 0; i < lRes.rows(); ++i) { /// row
+        for (size_t j = 0; j < lRes.cols(); ++j) { /// column
+            lRes(i, j) = (iMat1.getRowCopy(i) * iMat2.getColumnCopy(j)).sum();
         }
     }
     return lRes;
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
 
-    srand((unsigned)time(nullptr));
+    srand((unsigned) time(nullptr));
 
-    unsigned int lS = 5;
+    unsigned int matrixDimension = 5;
     if (argc == 2) {
-        lS = atoi(argv[1]);
+        matrixDimension = atoi(argv[1]);
     }
 
-    MatrixRandom lA(lS, lS);
+    MatrixRandom lA(matrixDimension, matrixDimension);
     cout << "Matrice random:\n" << lA.str() << endl;
 
     Matrix lB(lA);
-    invertSequential(lB);
-    cout << "Matrice inverse:\n" << lB.str() << endl;
+//    invertSequential(lB);
+//    cout << "Matrice inverse:\n" << lB.str() << endl;
+//
+//    Matrix lRes = multiplyMatrix(lA, lB);
+//    cout << "Produit des deux matrices:\n" << lRes.str() << endl;
+//
+//    cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
 
-    Matrix lRes = multiplyMatrix(lA, lB);
-    cout << "Produit des deux matrices:\n" << lRes.str() << endl;
 
-    cout << "Erreur: " << lRes.getDataArray().sum() - lS << endl;
+    cout << "Start MPI implementation" << endl;
 
-
-    MpiUtils::initMpi();
-
-    MpiUtils::rank();
-    MpiUtils::processorName();
-
-    MpiUtils::cleanup();
+    MPI_Init(nullptr, nullptr);
+    invertParallel(lB);
+    MPI_Finalize();
 
     return 0;
 }
-

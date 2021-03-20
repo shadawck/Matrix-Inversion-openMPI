@@ -4,7 +4,7 @@
 ```shell
 >> ./pp_tp3 10
 ----------------
-Matrix size : X
+Matrix matrixSize : X
 
 ----------------
 Error : 
@@ -17,6 +17,7 @@ Error :
 Inversion time : X
 ```
 
+### 2 Steps : 
 Forward elimination : Reduces a given system to row echelon form,
 Backward elimination : Puts the matrix into reduced row echelon form.  
 

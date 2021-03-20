@@ -9,14 +9,15 @@
 class MpiUtils {
 public:
 
-    static int initMpi();
+    static void initMpi(int argc, char **);
 
-    static int rank();
+    static void rank(int);
 
     static void processorName();
 
     static void cleanup();
-};
 
+    static void totalSize(int size);
+};
 
 #endif //TP3_MPIUTILS_H

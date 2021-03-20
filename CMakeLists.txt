@@ -1,13 +1,12 @@
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.6)
 project (pp_tp3)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -O3 -fopenmp -Wno-unused-variable -Wshadow -Wuninitialized -Wunused-label ${OpenMP_CXX_FLAGS}")
-
 find_package(MPI REQUIRED)
-add_definitions(-DOMPI_SKIP_MPICXX)
+include_directories(${MPI_INCLUDE_PATH})
 
-add_executable(main.cpp Matrix.cpp MpiUtils.cpp MpiUtils.h)
-target_link_libraries(pp_tp3 ${MPI_C_LIBRARIES})
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -O3 -Wno-unused-variable -Wshadow -Wuninitialized -Wunused-label")
 
-INCLUDE(CPack)
+add_executable(pp_tp3 main.cpp Matrix.cpp MpiUtils.cpp MpiUtils.hpp)
+target_link_libraries(pp_tp3 ${MPI_CXX_LIBRARIES} ${MPI_C_LIBRARIES} ${MPI_LIBRARIES})
+
