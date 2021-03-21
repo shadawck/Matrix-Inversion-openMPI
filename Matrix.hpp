@@ -96,9 +96,11 @@ public:
 
     static void printValArray(const valarray<double> &);
 
-    static void printArray(double *, int size);
+    static void printArray(double *, int size, int rank, string typeMatrix);
 
     static Matrix MatrixExample(size_t iRows, size_t iCols);
+
+    static void printArrayAsMatrix(double *arr, int rowSize, int colSize, string message);
 
 protected:
     // Nombre de rangées et de colonnes.

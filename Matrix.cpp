@@ -10,11 +10,23 @@ void Matrix::printValArray(const valarray<double> &array) {
     cout << endl << endl;
 }
 
-void Matrix::printArray(double arr[], int size) {
+void Matrix::printArray(double arr[], int size, int rank, string typeMatrix) {
+    string str;
     for (int i = 0; i < size; i++) {
-        cout << arr[i] << ", ";
+        str += to_string((int) arr[i]) + " ";
     }
-    cout << endl;
+    cout << "Rank of " << typeMatrix << " is : " << rank << " and array : " << str << endl;
+}
+
+void Matrix::printArrayAsMatrix(double arr[], int rowSize, int colSize, string message) {
+    cout << endl << " --- " << message << "---" << endl;
+    for (int i = 0; i < rowSize; i++) {
+        for (int j = rowSize * i; j < colSize + rowSize * i; j++) {
+            cout << arr[j] << ",";
+        }
+
+        cout << endl;
+    }
 }
 
 // Permuter deux rangées de la matrice.
@@ -70,14 +82,19 @@ MatrixIdentity::MatrixIdentity(size_t iSize) : Matrix(iSize, iSize) {
 // Construire une matrice aléatoire [0,1) iRows x iCols.
 // Utiliser srand pour initialiser le générateur de nombres.
 MatrixRandom::MatrixRandom(size_t iRows, size_t iCols) : Matrix(iRows, iCols) {
+    int min = 2;
+    int max = 9;
     for (size_t i = 0; i < mData.size(); ++i) {
-        mData[i] = (double) rand() / RAND_MAX;;
+        mData[i] = (double) min + rand() % (max + 1 - min);
     }
 }
 
 MatrixExample::MatrixExample(size_t iRows, size_t iCols) : Matrix(iRows, iCols) {
-    for (size_t i = 0; i < mData.size(); ++i) {
-        mData[i] = (double) ((i + 2.0) * 2.0);
+    double init[] = {5, 4, 4, 2, 7, 8, 1, 2, 7};
+    int i = 0;
+    for (double elem :init) {
+        mData[i] = elem;
+        i++;
     }
 }
 

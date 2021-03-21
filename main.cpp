@@ -77,165 +77,155 @@ valarray<double> convertDoubleToValArray(double *array, int arrayLength);
 
 /** NAIVE IMPLEMENTATION
  * Inverser la matrice par la méthode de Gauss-Jordan; implantation MPI parallèle.
- * @param augmentedMatrix
+ * @param mat
  */
-void invertParallel(
-        Matrix &augmentedMatrix) { // Number of row staw matrixDimension but for augmentedMatrix col number change
+void invertParallel(Matrix &mat) { // Number of row staw matrixDimension but for mat col number change
     int rank, size;
-    assert(augmentedMatrix.rows() == augmentedMatrix.cols());
-    int rowSize = augmentedMatrix.rows();
-    int colSize = augmentedMatrix.rows();
+    assert(mat.rows() == mat.cols());
+    MatrixConcatCols *augmentedMat;
+
+    int dim = mat.rows();
+    int rowSize = mat.rows();
+    int colSize = mat.rows();
 
     MPI_Init(nullptr, nullptr);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-//    MatrixConcatCols *augmentedMatrix;
+    if (size > dim) {
+        cout << "Number of proc need to be greater than dim of matrix" << endl;
+        MPI_Finalize();
+        exit(0);
+    }
 
-    double *originalArray;
+    MatrixIdentity eye(dim);
+
+    double *matrixArray;
+    double *eyeArray;
     if (rank == 0) {
-//        augmentedMatrix = new MatrixConcatCols(augmentedMatrix, MatrixIdentity(augmentedMatrix.rows()));
-        cout << "PRINT AUGMENTED MATRIX" << endl;
-        cout << augmentedMatrix.str() << endl;
-        originalArray = convertValArrayToDouble(augmentedMatrix.getDataArray());
+        augmentedMat = new MatrixConcatCols(mat, MatrixIdentity(mat.rows()));
+        cout << mat.str() << endl;
+        matrixArray = convertValArrayToDouble(mat.getDataArray());
+        eyeArray = convertValArrayToDouble(eye.getDataArray());
     }
 
     int numRows = rowSize / size;
 
-//    cout << "Array for rank : " << rank << endl;
-//    int subArrayLength = sizeof(subArray) / sizeof(subArray[0]);
-//    Matrix::printArray(subArray, subArrayLength);
-
     double subArray[numRows * colSize];
+    double subEyeArray[numRows * colSize];
+    /// START SCATTER
     if (size == 1) {
-        memcpy(subArray, originalArray, rowSize * colSize * sizeof(double));
+        memcpy(subArray, matrixArray, rowSize * colSize * sizeof(double));
+        memcpy(subEyeArray, eyeArray, rowSize * colSize * sizeof(double));
     } else {
         for (int row = 0; row < numRows; row++) {
-            MPI_Scatter(&originalArray[row * colSize * size], colSize, MPI_DOUBLE,
-                        &subArray[row * colSize], colSize, MPI_DOUBLE, ROOT_PROCESS,
+//            if (rank == 0) cout << "Iteration " << row << " | Scatter start at : " << matrixArray[row * colSize * size] << endl;
+            MPI_Scatter(&matrixArray[row * colSize * size], colSize, MPI_DOUBLE,
+                        &subArray[row * colSize], colSize, MPI_DOUBLE,
+                        ROOT_PROCESS,
                         MPI_COMM_WORLD);
         }
     }
-    /** DEBUG */
-    //cout << "Array for rank : " << rank << endl;
-    int subArrayLength = sizeof(subArray) / sizeof(subArray[0]);
-    //Matrix::printArray(subArray, subArrayLength);
+    /// DEBUG SCATTER
+    int subArrayLength = numRows * colSize;
+    Matrix::printArray(subArray, subArrayLength, rank, "SUB_MATRIX");
 
-    double rowToSend[colSize];
-
-    // Get start time
-    double chronoStart;
-    if (rank == 0) {
-        chronoStart = MPI_Wtime();
-    }
-
-    int localRow, whichRank;
+    /// All processor pivoting
     double pivot, scale;
-    for (int row = 0; row < rowSize; row++) {
-        Matrix::printArray(subArray, subArrayLength);
-        // row of the subMatrix
-        localRow = row / size;
-        // rank of this localRow
-        whichRank = row % size;
+    int local_row, which_rank;
+    double row[colSize];
+    double eyeRow[colSize];
 
-        // if pivot in rank of localRow then eliminate
-        if (rank == whichRank) {
-            pivot = subArray[localRow * colSize + row];
+    for (int i = 0; i < rowSize; i++) {
+        // Which row in the sub-matrix are we accessing?
+        local_row = i / size;
+        // Which rank does this row belong to?
+        which_rank = i % size;
 
-            // iterate through each element of row (without the pivot)
-            for (int j = row + 1; j < colSize; j++) {
-                double tmp = subArray[localRow * colSize + j];
-                subArray[localRow * colSize + j] /= pivot;
-                cout << "Before : " << tmp << "| After : " << subArray[localRow * colSize + j] << "| Pivot was :" << pivot << endl;
+        // Eliminate if the pivot belongs to this rank
+        if (rank == which_rank) {
+            pivot = subArray[local_row * rowSize + i];
+
+            // Divide the rest of the row by the pivot
+            for (int j = i + 1; j < rowSize; j++) {
+                subArray[local_row * rowSize + j] /= pivot;
+                subEyeArray[local_row * rowSize + j] /= pivot;
             }
 
-            // directly assigne 1 to divided pivot
-            subArray[localRow * colSize + row] = 1;
-//            cout << endl << "Divided Row of rank : " << rank << endl;
-//            Matrix::printArray(subArray, subArrayLength);
+            // Use assignment for the trivial self-division
+            subArray[local_row * rowSize + i] = 1;
+            subEyeArray[local_row * rowSize + i] = 1;
 
             // Copy the row into our send buffer
-            memcpy(rowToSend, &subArray[localRow * colSize], colSize * sizeof(double));
-
-            //cout << "Sended Row" << endl;
-            //Matrix::printArray(rowToSend, subArrayLength);
+            memcpy(row, &subArray[local_row * rowSize], rowSize * sizeof(double));
+            memcpy(eyeRow, &subEyeArray[local_row * rowSize], rowSize * sizeof(double));
 
             // Broadcast this row to all the ranks
-            MPI_Bcast(rowToSend, colSize, MPI_DOUBLE, whichRank, MPI_COMM_WORLD);
+            MPI_Bcast(row, rowSize, MPI_DOUBLE, which_rank, MPI_COMM_WORLD);
+            MPI_Bcast(eyeRow, rowSize, MPI_DOUBLE, which_rank, MPI_COMM_WORLD);
 
             // Eliminate for the other rows mapped to this rank
-            for (int j = localRow + 1; j < numRows; j++) {
-                scale = subArray[j * colSize + row];
+            for (int j = local_row + 1; j < numRows; j++) {
+                scale = subArray[j * rowSize + i];
 
                 // Subtract to eliminate pivot from later rows
-                for (int k = row + 1; k < rowSize; k++) {
-                    double tmp = subArray[j * colSize + k];
-                    subArray[j * colSize + k] -= scale * rowToSend[k];
-                    cout << "Before : " << tmp << "| After : " << subArray[j * colSize + k] << "| Scale was :" << scale << "| rTS value was : " << rowToSend[k] << endl;
+                for (int k = i + 1; k < rowSize; k++) {
+                    subArray[j * rowSize + k] -= scale * row[k];
+                    subEyeArray[j * rowSize + k] -= scale * eyeRow[k];
                 }
 
-                subArray[j * colSize + row] = 0;
-
-//                cout << endl << "UPDATED SUBARRAY of rank " << rank << endl;
-//                Matrix::printArray(subArray, subArrayLength);
-//                cout << endl;
-
+                // Use assignment for the trivial elimination
+                subArray[j * rowSize + i] = 0;
+                subEyeArray[j * rowSize + i] = 0;
             }
-        } /*else {
+        } else {
             // Receive a row to use for elimination
-            MPI_Bcast(rowToSend, colSize, MPI_DOUBLE, whichRank, MPI_COMM_WORLD);
+            MPI_Bcast(row, rowSize, MPI_DOUBLE, which_rank, MPI_COMM_WORLD);
+            MPI_Bcast(eyeRow, rowSize, MPI_DOUBLE, which_rank, MPI_COMM_WORLD);
 
-            for (int j = localRow; j < numRows; j++) {
-                if (whichRank < rank || j > localRow) {
-                    scale = subArray[j * colSize + row];
-                    //cout << "scale" << scale << endl;
+            // Eliminate for all the rows mapped to this rank
+            for (int j = local_row; j < numRows; j++) {
+                if ((which_rank < rank) || (j > local_row)) {
+                    scale = subArray[j * rowSize + i];
 
                     //Subtract to eliminate pivot from later rows
-                    for (int k = row + 1; k < rowSize; k++) {
-                        subArray[j * colSize + k] -= scale * rowToSend[k];
+                    for (int k = i + 1; k < rowSize; k++) {
+                        subArray[j * rowSize + k] -= scale * row[k];
+                        subEyeArray[j * rowSize + k] -= scale * eyeRow[k];
                     }
 
                     // Use assignment for the trivial elimination
-                    subArray[j * colSize + row] = 0;
+                    subArray[j * rowSize + i] = 0;
+                    subEyeArray[j * rowSize + i] = 0;
                 }
             }
-        }*/
+        }
     }
 
-    // Stop the time before the gather phase
-    double chronoEnd;
-    double total;
-    if (rank == 0) {
-        chronoEnd = MPI_Wtime();
-        total = chronoEnd - chronoStart;
-    }
+    // Barrier to track when calculations are done
+    MPI_Barrier(MPI_COMM_WORLD);
 
-    /*
- * Collect all Sub-Matrices
- * All sub-matrices are gathered using the gather function
- */
-
-
+    /// START GATHER
     if (size == 1) {
-        memcpy(originalArray, subArray, rowSize * colSize * sizeof(double));
+        memcpy(matrixArray, subArray, rowSize * colSize * sizeof(double));
+        memcpy(eyeArray, subEyeArray, rowSize * colSize * sizeof(double));
     } else {
-        // Gather "size" rows at a time
-        for (int row = 0; row < numRows; row++) {
-            MPI_Gather(&subArray[row * colSize], colSize, MPI_DOUBLE,
-                       &originalArray[row * size * colSize], colSize, MPI_DOUBLE, ROOT_PROCESS,
+        for (int r = 0; r < numRows; r++) {
+            MPI_Gather(&subArray[r * colSize], colSize, MPI_DOUBLE,
+                       &matrixArray[r * size * colSize], colSize, MPI_DOUBLE,
+                       ROOT_PROCESS,
                        MPI_COMM_WORLD);
         }
     }
+
+    /// DEBUG GATHER
+    int matrixArrayLength = mat.rows() * mat.cols();
+    if (rank == 0) Matrix::printArray(matrixArray, matrixArrayLength, rank, "MATRIX");
+
     MPI_Finalize();
 
-    if (rank == 0) {
-        auto val = convertDoubleToValArray(originalArray, sizeof(originalArray) / sizeof(originalArray[0]));
-        //cout << "FINAL ARRAY" << endl;
-        //Matrix::printValArray(val);
-
-        //cout << total << " Seconds" << endl;
-    }
-
+    if (rank == 0) Matrix::printArrayAsMatrix(matrixArray, rowSize, colSize, "MATRIX");
+    if (rank == 0) Matrix::printArrayAsMatrix(eyeArray, rowSize, colSize, "INVERSED RESULT");
 
 }
 
@@ -272,9 +262,7 @@ int main(int argc, char **argv) {
     }
 
     MatrixRandom lA(matrixDimension, matrixDimension);
-
-    cout << "EXAMPLE" << endl;
-    MatrixExample matrixExample(matrixDimension, matrixDimension);
+//    MatrixExample matrixExample(matrixDimension, 3);
 
 //    cout << "Matrice random:\n" << lA.str() << endl;
 
@@ -287,7 +275,8 @@ int main(int argc, char **argv) {
 //
 //    cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
 
-    invertParallel(lA);
+
+    invertParallel(lB);
 
     return 0;
 }
