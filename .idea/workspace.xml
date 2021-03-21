@@ -61,11 +61,6 @@
     </key>
   </component>
   <component name="RunManager">
-    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true">
-      <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
-      </method>
-    </configuration>
     <configuration name="pp_tp3" type="CMakeRunConfiguration" factoryName="Application" PROGRAM_PARAMS="6" REDIRECT_INPUT="false" ELEVATE="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="pp_tp3" TARGET_NAME="pp_tp3" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="pp_tp3" RUN_TARGET_NAME="pp_tp3">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
@@ -86,7 +81,8 @@
       <option name="presentableId" value="Default" />
       <updated>1616167605677</updated>
       <workItem from="1616167607976" duration="2978000" />
-      <workItem from="1616236231405" duration="38018000" />
+      <workItem from="1616236231405" duration="38048000" />
+      <workItem from="1616321297145" duration="6248000" />
     </task>
     <servers />
   </component>

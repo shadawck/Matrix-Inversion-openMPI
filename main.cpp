@@ -1,5 +1,4 @@
 #include "Matrix.hpp"
-#include "MpiUtils.hpp"
 
 #include <cstdlib>
 #include <ctime>
@@ -80,39 +79,74 @@ void findPivot(size_t row, MatrixConcatCols &augmentedMatrix, size_t &pivot) {
  * @param mat
  */
 void invertParallel(Matrix &mat) { // Number of row staw matrixDimension but for augmentedMatrix col number change
-    int rank, nbProcess;
-
+    int rank, size;
     assert(mat.rows() == mat.cols());
-    MatrixConcatCols augmentedMatrix(mat, MatrixIdentity(mat.rows()));
+    int rowSize = mat.rows();
+    int colSize = mat.rows() * 2;
 
-    int rowSize = augmentedMatrix.rows();
-    int colSize = augmentedMatrix.cols();
-
+    MPI_Init(nullptr, nullptr);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &nbProcess);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    int rowByProcess = rowSize / nbProcess;
-//    cout << "Row By process: " << rowByProcess << endl;
-
+    MatrixConcatCols *augmentedMatrix;
+    double *originalArray;
     if (rank == 0) {
+        augmentedMatrix = new MatrixConcatCols(mat, MatrixIdentity(mat.rows()));
         cout << "PRINT AUGMENTED MATRIX" << endl;
-        cout << augmentedMatrix.str() << endl;
+        cout << augmentedMatrix->str() << endl;
+        originalArray = convertValArrayToDouble(augmentedMatrix->getDataArray());
     }
 
-    double *sendarray = convertValArrayToDouble(augmentedMatrix.getDataArray());
-    double recvarray[rowByProcess * colSize];
+    int numRows = rowSize / size;
 
-    MPI_Scatter(sendarray, rowByProcess * colSize, MPI_DOUBLE,
-                recvarray, rowByProcess * colSize, MPI_DOUBLE, ROOT_PROCESS,
-                MPI_COMM_WORLD);
+//    Naive IMPL
+//    MPI_Scatter(originalArray, numRows * colSize, MPI_DOUBLE,
+//                subArray, numRows * colSize, MPI_DOUBLE, ROOT_PROCESS,
+//                MPI_COMM_WORLD);
 
+//
+//    cout << "Array for rank : " << rank << endl;
+//    int arrayLength = sizeof(subArray) / sizeof(subArray[0]);
+//    Matrix::printArray(subArray, arrayLength);
+
+    double subArray[numRows * colSize];
+    if (size == 1) {
+        memcpy(subArray, originalArray, rowSize * colSize * sizeof(double));
+    } else {
+        for (int row = 0; row < numRows; row++) {
+            MPI_Scatter(&originalArray[row * colSize * size], colSize, MPI_DOUBLE,
+                        &subArray[row * colSize], colSize, MPI_DOUBLE, ROOT_PROCESS,
+                        MPI_COMM_WORLD);
+        }
+    }
+    /** DEBUG */
     cout << "Array for rank : " << rank << endl;
-    int size = sizeof(recvarray)/sizeof(recvarray[0]);
-    Matrix::printArray(recvarray, size);
+    int arrayLength = sizeof(subArray) / sizeof(subArray[0]);
+    Matrix::printArray(subArray, arrayLength);
+    MPI_Barrier(MPI_COMM_WORLD);
+
+
+    cout << "START GAUSSAIN ELIMINATION" << endl;
+    int localRow, whichRank;
+    double pivot;
+    for (int row = 0; row < rowSize; row++) {
+        // row of the subMatrix
+        localRow = row / size;
+        // rank of this localRow
+        whichRank = row % size;
+
+        // if pivot in rank of localRow then eliminate
+        if (rank == whichRank) {
+            pivot = subArray[localRow * colSize + row];
+            cout << "rank : " << rank << " " << pivot << endl;
+        }
+    }
+
 
 }
 
-double *convertValArrayToDouble(valarray<double> array) {// This is how you can get a dynamic array from a valarray.
+// This is how you can get a dynamic array from a valarray.
+double *convertValArrayToDouble(valarray<double> array) {
     auto *newArray = new double[array.size()];
     copy(begin(array), end(array), newArray);
     return newArray;
@@ -134,12 +168,16 @@ int main(int argc, char **argv) {
 
     srand((unsigned) time(nullptr));
 
-    unsigned int matrixDimension = 5;
+    int matrixDimension = 5;
     if (argc == 2) {
         matrixDimension = atoi(argv[1]);
     }
 
     MatrixRandom lA(matrixDimension, matrixDimension);
+
+    cout << "EXAMPLE" << endl;
+    MatrixExample matrixExample(matrixDimension, matrixDimension);
+
 //    cout << "Matrice random:\n" << lA.str() << endl;
 
     Matrix lB(lA);
@@ -152,10 +190,7 @@ int main(int argc, char **argv) {
 //    cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
 
 
-    cout << "Start MPI implementation" << endl;
-
-    MPI_Init(nullptr, nullptr);
-    invertParallel(lB);
+    invertParallel(matrixExample);
     MPI_Finalize();
 
     return 0;

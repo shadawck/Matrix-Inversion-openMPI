@@ -12,7 +12,7 @@ void Matrix::printValArray(const valarray<double> &array) {
 
 void Matrix::printArray(double arr[], int size) {
     for (int i = 0; i < size; i++) {
-            cout << arr[i] << ", ";
+        cout << arr[i] << ", ";
     }
     cout << endl;
 }
@@ -74,6 +74,13 @@ MatrixRandom::MatrixRandom(size_t iRows, size_t iCols) : Matrix(iRows, iCols) {
         mData[i] = (double) rand() / RAND_MAX;;
     }
 }
+
+MatrixExample::MatrixExample(size_t iRows, size_t iCols) : Matrix(iRows, iCols) {
+    for (size_t i = 0; i < mData.size(); ++i) {
+        mData[i] = (int) ((i + 2) * 2);
+    }
+}
+
 
 // Construire une matrice en concaténant les colonnes de deux matrices de même hauteur.
 MatrixConcatCols::MatrixConcatCols(const Matrix &iMat1, const Matrix &iMat2) : Matrix(iMat1.rows(),

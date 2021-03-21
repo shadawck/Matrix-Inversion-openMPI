@@ -95,7 +95,10 @@ public:
     [[nodiscard]] string str() const;
 
     static void printValArray(const valarray<double> &);
+
     static void printArray(double *, int size);
+
+    static Matrix MatrixExample(size_t iRows, size_t iCols);
 
 protected:
     // Nombre de rangées et de colonnes.
@@ -114,6 +117,11 @@ public:
 class MatrixRandom : public Matrix {
 public:
     MatrixRandom(size_t iRows, size_t iCols);
+};
+
+class MatrixExample : public Matrix {
+public:
+    MatrixExample(size_t iRows, size_t iCols);
 };
 
 // Construire une matrice en concaténant les colonnes de deux matrices de même hauteur.
