@@ -77,7 +77,7 @@ MatrixRandom::MatrixRandom(size_t iRows, size_t iCols) : Matrix(iRows, iCols) {
 
 MatrixExample::MatrixExample(size_t iRows, size_t iCols) : Matrix(iRows, iCols) {
     for (size_t i = 0; i < mData.size(); ++i) {
-        mData[i] = (int) ((i + 2) * 2);
+        mData[i] = (double) ((i + 2.0) * 2.0);
     }
 }
 

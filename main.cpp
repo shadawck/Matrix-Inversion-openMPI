@@ -117,9 +117,9 @@ void invertParallel(
         }
     }
     /** DEBUG */
-    cout << "Array for rank : " << rank << endl;
+    //cout << "Array for rank : " << rank << endl;
     int subArrayLength = sizeof(subArray) / sizeof(subArray[0]);
-    Matrix::printArray(subArray, subArrayLength);
+    //Matrix::printArray(subArray, subArrayLength);
 
     double rowToSend[colSize];
 
@@ -132,6 +132,7 @@ void invertParallel(
     int localRow, whichRank;
     double pivot, scale;
     for (int row = 0; row < rowSize; row++) {
+        Matrix::printArray(subArray, subArrayLength);
         // row of the subMatrix
         localRow = row / size;
         // rank of this localRow
@@ -140,11 +141,12 @@ void invertParallel(
         // if pivot in rank of localRow then eliminate
         if (rank == whichRank) {
             pivot = subArray[localRow * colSize + row];
-            cout << "rank : " << rank << " pivot : " << pivot << endl;
 
             // iterate through each element of row (without the pivot)
             for (int j = row + 1; j < colSize; j++) {
+                double tmp = subArray[localRow * colSize + j];
                 subArray[localRow * colSize + j] /= pivot;
+                cout << "Before : " << tmp << "| After : " << subArray[localRow * colSize + j] << "| Pivot was :" << pivot << endl;
             }
 
             // directly assigne 1 to divided pivot
@@ -155,8 +157,8 @@ void invertParallel(
             // Copy the row into our send buffer
             memcpy(rowToSend, &subArray[localRow * colSize], colSize * sizeof(double));
 
-            cout << "Sended Row" << endl;
-            Matrix::printArray(rowToSend, subArrayLength);
+            //cout << "Sended Row" << endl;
+            //Matrix::printArray(rowToSend, subArrayLength);
 
             // Broadcast this row to all the ranks
             MPI_Bcast(rowToSend, colSize, MPI_DOUBLE, whichRank, MPI_COMM_WORLD);
@@ -167,24 +169,26 @@ void invertParallel(
 
                 // Subtract to eliminate pivot from later rows
                 for (int k = row + 1; k < rowSize; k++) {
+                    double tmp = subArray[j * colSize + k];
                     subArray[j * colSize + k] -= scale * rowToSend[k];
+                    cout << "Before : " << tmp << "| After : " << subArray[j * colSize + k] << "| Scale was :" << scale << "| rTS value was : " << rowToSend[k] << endl;
                 }
 
                 subArray[j * colSize + row] = 0;
 
-                cout << endl << "UPDATED SUBARRAY of rank " << rank << endl;
-                Matrix::printArray(subArray, subArrayLength);
-                cout << endl;
+//                cout << endl << "UPDATED SUBARRAY of rank " << rank << endl;
+//                Matrix::printArray(subArray, subArrayLength);
+//                cout << endl;
 
             }
-        } else {
+        } /*else {
             // Receive a row to use for elimination
             MPI_Bcast(rowToSend, colSize, MPI_DOUBLE, whichRank, MPI_COMM_WORLD);
 
             for (int j = localRow; j < numRows; j++) {
                 if (whichRank < rank || j > localRow) {
                     scale = subArray[j * colSize + row];
-                    cout << "scale" << scale << endl;
+                    //cout << "scale" << scale << endl;
 
                     //Subtract to eliminate pivot from later rows
                     for (int k = row + 1; k < rowSize; k++) {
@@ -195,7 +199,7 @@ void invertParallel(
                     subArray[j * colSize + row] = 0;
                 }
             }
-        }
+        }*/
     }
 
     // Stop the time before the gather phase
@@ -226,10 +230,10 @@ void invertParallel(
 
     if (rank == 0) {
         auto val = convertDoubleToValArray(originalArray, sizeof(originalArray) / sizeof(originalArray[0]));
-        cout << "FINAL ARRAY" << endl;
-        Matrix::printValArray(val);
+        //cout << "FINAL ARRAY" << endl;
+        //Matrix::printValArray(val);
 
-        cout << total << " Seconds" << endl;
+        //cout << total << " Seconds" << endl;
     }
 
 
@@ -283,7 +287,7 @@ int main(int argc, char **argv) {
 //
 //    cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
 
-    invertParallel(matrixExample);
+    invertParallel(lA);
 
     return 0;
 }
