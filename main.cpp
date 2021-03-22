@@ -78,8 +78,8 @@ void findPivot(size_t row, MatrixConcatCols &augmentedMatrix, size_t &pivot) {
 }
 
 struct {
-    double value;
-    int index;
+    double localPivotValue;
+    int localPivotIndex;
 } send, recv;
 
 /** NAIVE IMPLEMENTATION
@@ -95,28 +95,33 @@ void invertParallel(Matrix &mat) {
     MatrixConcatCols augmentedMatrix(mat, MatrixIdentity(mat.rows()));
 
     for (size_t k = 0; k < augmentedMatrix.rows(); ++k) {
+
         double lMax = 0;
-        size_t q = k;
+        // trouver le l'index du plus grand pivot (local) de la colonne k en valeur absolue pour le process i%size
+        int localPivotIndex = k;
         for (size_t i = k; i < augmentedMatrix.rows(); ++i) {
             if ((i % size) == rank) {
                 if (fabs(augmentedMatrix(i, k)) > lMax) {
                     lMax = fabs(augmentedMatrix(i, k));
-                    q = i;
+                    localPivotIndex = i;
                 }
             }
         }
-        send.index = q;
-        send.value = lMax;
-        MPI_Allreduce(&send, &recv, size, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD); //recv.value is never used - change with MPI_recv and MPI_send
+        send.localPivotIndex = localPivotIndex;
+        send.localPivotValue = lMax;
 
-        q = recv.index;
-        int root = q % size;
-        MPI_Bcast(&augmentedMatrix(q, 0), augmentedMatrix.cols(), MPI_DOUBLE, root, MPI_COMM_WORLD);
+        // Find max in struct on each process and send result to every process
+        MPI_Allreduce(&send, &recv, size, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD); //recv.localPivotValue is never used - change with MPI_recv and MPI_send
 
-        checkSingularity(augmentedMatrix, q, k);
+        int maxPivotIndex = recv.localPivotIndex;
 
-        // on swap la ligne q avec la ligne k
-        if (q != k) augmentedMatrix.swapRows(q, k);
+        int root = maxPivotIndex % size;
+        MPI_Bcast(&augmentedMatrix(maxPivotIndex, 0), augmentedMatrix.cols(), MPI_DOUBLE, root, MPI_COMM_WORLD);
+
+        checkSingularity(augmentedMatrix, maxPivotIndex, k);
+
+        // on swap la ligne du pivot avec la ligne k
+        if (maxPivotIndex != k) augmentedMatrix.swapRows(maxPivotIndex, k);
 
 
         // on normalise la ligne k afin que l'element (k,k) soit egale a 1
@@ -125,7 +130,7 @@ void invertParallel(Matrix &mat) {
             augmentedMatrix(k, j) /= lValue;
         }
 
-        //// Pour chaque rangée...
+        // Pour chaque rangée...
         for (size_t i = 0; i < augmentedMatrix.rows(); ++i) {
             if ((i % size) == rank) {
                 if (i != k) { // ...différente de k
