@@ -96,8 +96,9 @@ void invertParallel(Matrix &mat) {
 
     for (size_t k = 0; k < augmentedMatrix.rows(); ++k) {
 
+        /** Determonation of the localPivot element */
+        // find index of biggest local pivot of k in each process
         double lMax = 0;
-        // trouver le l'index du plus grand pivot (local) de la colonne k en valeur absolue pour le process i%size
         int localPivotIndex = k;
         for (size_t i = k; i < augmentedMatrix.rows(); ++i) {
             if ((i % size) == rank) {
@@ -110,9 +111,9 @@ void invertParallel(Matrix &mat) {
         send.localPivotIndex = localPivotIndex;
         send.localPivotValue = lMax;
 
+        /** Determination of Global pivot element */
         // Find max in struct on each process and send result to every process
         MPI_Allreduce(&send, &recv, size, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD); //recv.localPivotValue is never used - change with MPI_recv and MPI_send
-
         int maxPivotIndex = recv.localPivotIndex;
 
         int root = maxPivotIndex % size;
@@ -120,9 +121,11 @@ void invertParallel(Matrix &mat) {
 
         checkSingularity(augmentedMatrix, maxPivotIndex, k);
 
+        /** Exchange of the pivot raw */
         // on swap la ligne du pivot avec la ligne k
-        if (maxPivotIndex != k) augmentedMatrix.swapRows(maxPivotIndex, k);
-
+        if (maxPivotIndex != k){
+            augmentedMatrix.swapRows(maxPivotIndex, k);
+        }
 
         // on normalise la ligne k afin que l'element (k,k) soit egale a 1
         double lValue = augmentedMatrix(k, k);
@@ -194,11 +197,11 @@ int main(int argc, char **argv) {
         invertSequential(seqMatrix);
         chronoSeqEnd = MPI_Wtime();
 
-        cout << "Matrice inverse:\n" << seqMatrix.str() << endl;
-        Matrix lRes = multiplyMatrix(seqMatrix, copyRandomMatrix);
-        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
-
-        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
+//        cout << "Matrice inverse:\n" << seqMatrix.str() << endl;
+//        Matrix lRes = multiplyMatrix(seqMatrix, copyRandomMatrix);
+//        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
+//
+//        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
         cout << "Total sequential execution time : " << chronoSeqEnd - chronoSeqStart << endl;
     }
 
@@ -207,22 +210,22 @@ int main(int argc, char **argv) {
      */
 
     Matrix parMatrix = Matrix(randomMatrix);
-    MPI_Bcast(&parMatrix(0, 0), matrixDimension * matrixDimension, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&parMatrix(0,0), matrixDimension * matrixDimension, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     double chronoParStart = MPI_Wtime();
     invertParallel(parMatrix);
     double chronoParEnd = MPI_Wtime();
 
     if (rank == 0) {
-        cout << "ORIGINAL MATRIX" << endl;
-        cout << copyRandomMatrix.str() << endl;
-
-        cout << "PARALLEL EXECUTION" << endl;
-        cout << "Matrice inverse:\n" << parMatrix.str() << endl;
-        Matrix lRes = multiplyMatrix(parMatrix, copyRandomMatrix);
-        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
-
-        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
+//        cout << "ORIGINAL MATRIX" << endl;
+//        cout << copyRandomMatrix.str() << endl;
+//
+//        cout << "PARALLEL EXECUTION" << endl;
+//        cout << "Matrice inverse:\n" << parMatrix.str() << endl;
+//        Matrix lRes = multiplyMatrix(parMatrix, copyRandomMatrix);
+//        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
+//
+//        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
         cout << "Total parallel execution time : " << chronoParEnd - chronoParStart << endl;
     }
 
