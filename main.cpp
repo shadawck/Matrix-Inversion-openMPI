@@ -1,5 +1,4 @@
 #include "Matrix.hpp"
-
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
@@ -29,7 +28,7 @@ void invertSequential(Matrix &mat) {
 
         size_t pivot;
         findPivot(row, augmentedMatrix, pivot);
-        checkSingularity(augmentedMatrix, row, pivot);
+        if (augmentedMatrix(pivot, row) == 0) throw runtime_error("Matrix not invertible");
 
         // échanger la ligne courante avec celle du pivot
         if (pivot != row) augmentedMatrix.swapRows(pivot, row);
@@ -62,10 +61,6 @@ void splitAugmentedMatrix(Matrix &mat, MatrixConcatCols &augmentedMatrix) {
     }
 }
 
-void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t row, size_t pivot) {
-    if (augmentedMatrix(pivot, row) == 0) throw runtime_error("Matrix not invertible");
-}
-
 void findPivot(size_t row, MatrixConcatCols &augmentedMatrix, size_t &pivot) {
     pivot = row;
     double lMax = fabs(augmentedMatrix(row, row));
@@ -78,82 +73,111 @@ void findPivot(size_t row, MatrixConcatCols &augmentedMatrix, size_t &pivot) {
 }
 
 struct {
-    double localPivotValue;
-    int localPivotIndex;
+    double val;
+    int ligne;
 } send, recv;
+
+double *convertValArrayToDouble(valarray<double> array) {
+    auto *newArray = new double[array.size()];
+    copy(begin(array), end(array), newArray);
+    return newArray;
+}
 
 /** NAIVE IMPLEMENTATION
  * Inverser la matrice par la méthode de Gauss-Jordan; implantation MPI parallèle.
  * @param mat
  */
 void invertParallel(Matrix &mat) {
-    int rank, size;
-    size = MPI::COMM_WORLD.Get_size();
-    rank = MPI::COMM_WORLD.Get_rank();
-
     assert(mat.rows() == mat.cols());
+    size_t matrixDimension = mat.rows() * mat.rows();
+    size_t rowLength = mat.rows();
+
     MatrixConcatCols augmentedMatrix(mat, MatrixIdentity(mat.rows()));
+    size_t colLength = augmentedMatrix.cols();
 
-    for (size_t k = 0; k < augmentedMatrix.rows(); ++k) {
+    int rank = MPI::COMM_WORLD.Get_rank();
+    int size = MPI::COMM_WORLD.Get_size();
 
-        /** Determonation of the localPivot element */
-        // find index of biggest local pivot of k in each process
-        double lMax = 0;
-        int localPivotIndex = k;
-        for (size_t i = k; i < augmentedMatrix.rows(); ++i) {
-            if ((i % size) == rank) {
+    for (int k = 0; k < mat.rows(); ++k) {
+        size_t p = k;
+        double lMax = std::numeric_limits<double>::lowest();
+        for (size_t i = k; i < augmentedMatrix.rows(); i++) {
+            if (i % (size) == (unsigned) rank) {
                 if (fabs(augmentedMatrix(i, k)) > lMax) {
                     lMax = fabs(augmentedMatrix(i, k));
-                    localPivotIndex = i;
+                    p = i;
                 }
             }
         }
-        send.localPivotIndex = localPivotIndex;
-        send.localPivotValue = lMax;
+        send.val = lMax;
+        send.ligne = p;
 
-        /** Determination of Global pivot element */
-        // Find max in struct on each process and send result to every process
-        MPI_Allreduce(&send, &recv, size, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD); //recv.localPivotValue is never used - change with MPI_recv and MPI_send
-        int maxPivotIndex = recv.localPivotIndex;
+        MPI_Allreduce(&send, &recv, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
 
-        int root = maxPivotIndex % size;
-        MPI_Bcast(&augmentedMatrix(maxPivotIndex, 0), augmentedMatrix.cols(), MPI_DOUBLE, root, MPI_COMM_WORLD);
+        double *rowMaxArray = convertValArrayToDouble(augmentedMatrix.getRowCopy(recv.ligne));
+        double *rowKArray = convertValArrayToDouble(augmentedMatrix.getRowCopy(k));
 
-        checkSingularity(augmentedMatrix, maxPivotIndex, k);
+        MPI_Bcast(rowMaxArray, colLength, MPI_DOUBLE, recv.ligne % size, MPI_COMM_WORLD);
+        MPI_Bcast(rowKArray, colLength, MPI_DOUBLE, k % size, MPI_COMM_WORLD);
 
-        /** Exchange of the pivot raw */
-        // on swap la ligne du pivot avec la ligne k
-        if (maxPivotIndex != k){
-            augmentedMatrix.swapRows(maxPivotIndex, k);
+        for (size_t i = 0; i < colLength; i++) {
+            augmentedMatrix(recv.ligne, i) = rowMaxArray[i];
+            augmentedMatrix(k, i) = rowKArray[i];
         }
 
-        // on normalise la ligne k afin que l'element (k,k) soit egale a 1
-        double lValue = augmentedMatrix(k, k);
+        delete[] rowMaxArray;
+
+        if (augmentedMatrix(p, k) == 0) {
+            throw runtime_error("Matrix not invertible");
+        }
+
+
+        if (recv.ligne != k) augmentedMatrix.swapRows(recv.ligne, k);
+
+        double pivot = augmentedMatrix(k, k);
         for (size_t j = 0; j < augmentedMatrix.cols(); ++j) {
-            augmentedMatrix(k, j) /= lValue;
+            augmentedMatrix(k, j) /= pivot;
         }
 
-        // Pour chaque rangée...
         for (size_t i = 0; i < augmentedMatrix.rows(); ++i) {
-            if ((i % size) == rank) {
-                if (i != k) { // ...différente de k
-                    // On soustrait la rangée k
-                    // multipliée par l'élément k de la rangée courante
-                    double lValue = augmentedMatrix(i, k);
-                    augmentedMatrix.getRowSlice(i) -= augmentedMatrix.getRowCopy(k) * lValue;
+            if (i != k) {
+                if (i % size == (unsigned) rank) {
+                    double scale = augmentedMatrix(i, k);
+                    augmentedMatrix.getRowSlice(i) -= augmentedMatrix.getRowCopy(k) * scale;
                 }
             }
-        }
-
-        for (int i = 0; i < augmentedMatrix.rows(); ++i) {
-            MPI_Bcast(&augmentedMatrix(i, 0), augmentedMatrix.cols(), MPI_DOUBLE, i % size, MPI_COMM_WORLD);
-        }
-
-        for (unsigned int i = 0; i < mat.rows(); ++i) {
-            mat.getRowSlice(i) = augmentedMatrix.getDataArray()[slice(
-                    i * augmentedMatrix.cols() + mat.cols(), mat.cols(), 1)];
         }
     }
+
+    // On copie la partie droite de la matrice AI ainsi transformée dans la matrice courante (this).
+    for (unsigned int i = 0; i < mat.rows(); ++i) {
+        mat.getRowSlice(i) = augmentedMatrix.getDataArray()[slice(i * augmentedMatrix.cols() + mat.cols(), mat.cols(),
+                                                                  1)];
+    }
+
+    auto *recvArray = (double *) malloc(size * mat.rows() * mat.rows() * sizeof(double));
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    double *sendBuf = convertValArrayToDouble(mat.getDataArray());
+
+    // gather matrix from each proccess
+    MPI_Gather(sendBuf, matrixDimension, MPI_DOUBLE, recvArray, matrixDimension, MPI_DOUBLE, ROOT_PROCESS,
+               MPI_COMM_WORLD);
+
+    // rebuild inverse matrix
+    if (rank == 0) {
+        size_t process, row, column;
+        for (size_t i = 0; i < size * augmentedMatrix.rows() * augmentedMatrix.rows(); i++) {
+            process = i / (augmentedMatrix.rows() * augmentedMatrix.rows());
+            row = (i % (augmentedMatrix.rows() * augmentedMatrix.rows()) / augmentedMatrix.rows());
+            column = (i % (mat.rows()));
+            if (row % size == process) {
+                mat.getDataArray()[(row * augmentedMatrix.rows()) + column] = recvArray[i];
+            }
+        }
+    }
+
+    delete[] sendBuf;
 }
 
 // Multiplier deux matrices.
@@ -210,22 +234,20 @@ int main(int argc, char **argv) {
      */
 
     Matrix parMatrix = Matrix(randomMatrix);
-    MPI_Bcast(&parMatrix(0,0), matrixDimension * matrixDimension, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
     double chronoParStart = MPI_Wtime();
     invertParallel(parMatrix);
     double chronoParEnd = MPI_Wtime();
 
     if (rank == 0) {
-//        cout << "ORIGINAL MATRIX" << endl;
+        cout << "ORIGINAL MATRIX" << endl;
 //        cout << copyRandomMatrix.str() << endl;
 //
 //        cout << "PARALLEL EXECUTION" << endl;
 //        cout << "Matrice inverse:\n" << parMatrix.str() << endl;
-//        Matrix lRes = multiplyMatrix(parMatrix, copyRandomMatrix);
+        Matrix lRes = multiplyMatrix(parMatrix, copyRandomMatrix);
 //        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
-//
-//        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
+
+        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
         cout << "Total parallel execution time : " << chronoParEnd - chronoParStart << endl;
     }
 
