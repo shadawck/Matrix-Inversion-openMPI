@@ -3,19 +3,6 @@
 
 using namespace std;
 
-void Matrix::printValArray(const valarray<double> &array) {
-    for (double elem : array) {
-        cout << elem << ", ";
-    }
-    cout << endl << endl;
-}
-
-void Matrix::printArray(double arr[], int size) {
-    for (int i = 0; i < size; i++) {
-        cout << arr[i] << ", ";
-    }
-    cout << endl;
-}
 
 // Permuter deux rangées de la matrice.
 Matrix &Matrix::swapRows(size_t iR1, size_t iR2) {

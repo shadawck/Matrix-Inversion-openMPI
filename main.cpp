@@ -166,12 +166,11 @@ void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, int k) 
     }
 }
 
-// Multiplier deux matrices.
 Matrix multiplyMatrix(const Matrix &iMat1, const Matrix &iMat2) {
     assert(iMat1.cols() == iMat2.rows());
     Matrix lRes(iMat1.rows(), iMat2.cols());
-    for (size_t i = 0; i < lRes.rows(); ++i) { /// index
-        for (size_t j = 0; j < lRes.cols(); ++j) { /// column
+    for (size_t i = 0; i < lRes.rows(); ++i) {
+        for (size_t j = 0; j < lRes.cols(); ++j) {
             lRes(i, j) = (iMat1.getRowCopy(i) * iMat2.getColumnCopy(j)).sum();
         }
     }
@@ -185,8 +184,8 @@ int main(int argc, char **argv) {
     if (argc == 2) {
         matrixDimension = atoi(argv[1]);
     }
-    int rank, size;
 
+    int rank, size;
     MatrixRandom randomMatrix(matrixDimension, matrixDimension);
     const Matrix &copyRandomMatrix(randomMatrix);
 
@@ -197,32 +196,30 @@ int main(int argc, char **argv) {
     /**
     * sequential execution
     */
-    // If Size = 1 : Execute sequential algo
     if (rank == 0) {
-        double chronoSeqStart, chronoSeqEnd;
+        double cronSeqStart, cronSeqEnd;
         cout << "SEQUENTIAL EXECUTION" << endl;
         Matrix seqMatrix(randomMatrix);
 
-        chronoSeqStart = MPI_Wtime();
+        cronSeqStart = MPI_Wtime();
         invertSequential(seqMatrix);
-        chronoSeqEnd = MPI_Wtime();
+        cronSeqEnd = MPI_Wtime();
 
 //        cout << "Matrice inverse:\n" << seqMatrix.str() << endl;
 //        Matrix lRes = multiplyMatrix(seqMatrix, copyRandomMatrix);
 //        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
 //
 //        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
-        cout << "Total sequential execution time : " << chronoSeqEnd - chronoSeqStart << endl;
+        cout << "Total sequential execution time : " << cronSeqEnd - cronSeqStart << endl;
     }
 
     /**
      * parallel execution
      */
-
     Matrix parMatrix = Matrix(randomMatrix);
-    double chronoParStart = MPI_Wtime();
+    double cronParStart = MPI_Wtime();
     invertParallel(parMatrix);
-    double chronoParEnd = MPI_Wtime();
+    double cronParEnd = MPI_Wtime();
 
     if (rank == 0) {
         cout << "ORIGINAL MATRIX" << endl;
@@ -234,14 +231,12 @@ int main(int argc, char **argv) {
         cout << "Produit des deux matrices:\n" << lRes.str() << endl;
 
         cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
-        cout << "Total parallel execution time : " << chronoParEnd - chronoParStart << endl;
+        cout << "Total parallel execution time : " << cronParEnd - cronParStart << endl;
     }
 
     MPI_Finalize();
-
     return 0;
 }
-
 
 void splitAugmentedMatrix(Matrix &mat, MatrixConcatCols &augmentedMatrix) {
     for (unsigned int i = 0; i < mat.rows(); ++i) {
