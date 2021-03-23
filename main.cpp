@@ -19,6 +19,8 @@ void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, size_t 
 void rebuildMatrix(Matrix &mat, size_t matrixDimension, const MatrixConcatCols &augmentedMatrix, int size,
                    const double *recvArray);
 
+Matrix multiplyMatrix(const Matrix &iMat1, const Matrix &iMat2);
+
 struct {
     double value;
     size_t index;
@@ -177,11 +179,11 @@ int main(int argc, char **argv) {
         invertSequential(seqMatrix);
         cronSeqEnd = MPI_Wtime();
 
-//        cout << "Matrice inverse:\n" << seqMatrix.str() << endl;
-//        Matrix lRes = multiplyMatrix(seqMatrix, copyRandomMatrix);
-//        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
+        cout << "Matrice inverse:\n" << seqMatrix.str() << endl;
+        Matrix lRes = multiplyMatrix(seqMatrix, copyRandomMatrix);
+        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
 //
-//        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
+        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
         cout << "Total sequential execution time : " << cronSeqEnd - cronSeqStart << endl;
     }
 
@@ -195,14 +197,14 @@ int main(int argc, char **argv) {
 
     if (rank == 0) {
         cout << "ORIGINAL MATRIX" << endl;
-//        cout << copyRandomMatrix.str() << endl;
+        cout << copyRandomMatrix.str() << endl;
 //
         cout << "PARALLEL EXECUTION" << endl;
-//        cout << "Matrice inverse:\n" << parMatrix.str() << endl;
-//        Matrix lRes = multiplyMatrix(parMatrix, copyRandomMatrix);
-//        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
+        cout << "Matrice inverse:\n" << parMatrix.str() << endl;
+        Matrix lRes = multiplyMatrix(parMatrix, copyRandomMatrix);
+        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
 //
-//        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
+        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
         cout << "Total parallel execution time : " << cronParEnd - cronParStart << endl;
     }
 
