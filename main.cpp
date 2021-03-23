@@ -21,6 +21,8 @@ void rebuildMatrix(Matrix &mat, size_t matrixDimension, const MatrixConcatCols &
 
 Matrix multiplyMatrix(const Matrix &iMat1, const Matrix &iMat2);
 
+void printResult(int matrixDimension, double totalPar, Matrix &lRes);
+
 struct {
     double value;
     size_t index;
@@ -172,19 +174,16 @@ int main(int argc, char **argv) {
     */
     if (rank == 0) {
         double cronSeqStart, cronSeqEnd;
-        cout << "SEQUENTIAL EXECUTION" << endl;
+        cout << "--- SEQUENTIAL EXECUTION ---" << endl;
         Matrix seqMatrix(randomMatrix);
 
         cronSeqStart = MPI_Wtime();
         invertSequential(seqMatrix);
         cronSeqEnd = MPI_Wtime();
+        double totalSeq = cronSeqEnd - cronSeqStart;
 
-        cout << "Matrice inverse:\n" << seqMatrix.str() << endl;
-        Matrix lRes = multiplyMatrix(seqMatrix, copyRandomMatrix);
-        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
-//
-        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
-        cout << "Total sequential execution time : " << cronSeqEnd - cronSeqStart << endl;
+        Matrix lResSeq = multiplyMatrix(seqMatrix, copyRandomMatrix);
+        printResult(matrixDimension, totalSeq, lResSeq);
     }
 
     /**
@@ -194,22 +193,22 @@ int main(int argc, char **argv) {
     double cronParStart = MPI_Wtime();
     invertParallel(parMatrix);
     double cronParEnd = MPI_Wtime();
+    double totalPar = cronParEnd - cronParStart;
 
     if (rank == 0) {
-        cout << "ORIGINAL MATRIX" << endl;
-        cout << copyRandomMatrix.str() << endl;
-//
-        cout << "PARALLEL EXECUTION" << endl;
-        cout << "Matrice inverse:\n" << parMatrix.str() << endl;
-        Matrix lRes = multiplyMatrix(parMatrix, copyRandomMatrix);
-        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
-//
-        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
-        cout << "Total parallel execution time : " << cronParEnd - cronParStart << endl;
+        cout << endl << " --- PARALLEL EXECUTION --- " << endl;
+        Matrix lResPar = multiplyMatrix(parMatrix, copyRandomMatrix);
+        printResult(matrixDimension, totalPar, lResPar);
     }
 
     MPI_Finalize();
     return 0;
+}
+
+void printResult(int matrixDimension, double totalPar, Matrix &lRes) {
+    cout << "Matrix dimension : " << matrixDimension << endl;
+    cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
+    cout << "Total parallel execution time : " << totalPar << endl;
 }
 
 void splitAugmentedMatrix(Matrix &mat, MatrixConcatCols &augmentedMatrix) {
