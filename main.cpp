@@ -14,14 +14,14 @@ void splitAugmentedMatrix(Matrix &mat, MatrixConcatCols &augmentedMatrix);
 
 double *convertValArrayToDouble(valarray<double> array);
 
-void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, int k);
+void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, size_t k);
 
 void rebuildMatrix(Matrix &mat, size_t matrixDimension, const MatrixConcatCols &augmentedMatrix, int size,
                    const double *recvArray);
 
 struct {
     double value;
-    int index;
+    size_t index;
 } send, recv;
 
 const unsigned int ROOT_PROCESS = 0;
@@ -73,16 +73,17 @@ void invertParallel(Matrix &mat) {
     size_t matrixDimension = mat.rows() * mat.rows();
 
     MatrixConcatCols augmentedMatrix(mat, MatrixIdentity(mat.rows()));
+    size_t rowLength = augmentedMatrix.rows();
     size_t colLength = augmentedMatrix.cols();
 
     int rank = MPI::COMM_WORLD.Get_rank();
     int size = MPI::COMM_WORLD.Get_size();
 
-    for (int k = 0; k < mat.rows(); ++k) {
+    for (size_t k = 0; k < mat.rows(); ++k) {
         size_t locPivot = k;
         double lMax = numeric_limits<double>::lowest();
         double lp;
-        for (size_t i = k; i < augmentedMatrix.rows(); i++) {
+        for (size_t i = k; i < rowLength; i++) {
             lp = fabs(augmentedMatrix(i, k));
             if ((i % (size) == rank) && (lp > lMax)) {
                 lMax = lp;
@@ -97,7 +98,7 @@ void invertParallel(Matrix &mat) {
         double *rowMaxArray = convertValArrayToDouble(augmentedMatrix.getRowCopy(recv.index));
         double *rowKArray = convertValArrayToDouble(augmentedMatrix.getRowCopy(k));
         MPI_Bcast(rowMaxArray, colLength, MPI_DOUBLE, recv.index % size, MPI_COMM_WORLD);
-        MPI_Bcast(rowKArray, colLength, MPI_DOUBLE, k % size, MPI_COMM_WORLD);
+        MPI_Bcast(rowKArray, colLength, MPI_DOUBLE, (int) k % size, MPI_COMM_WORLD);
 
         for (size_t i = 0; i < colLength; i++) {
             augmentedMatrix(recv.index, i) = rowMaxArray[i];
@@ -114,14 +115,14 @@ void invertParallel(Matrix &mat) {
         }
 
         double pivot = augmentedMatrix(k, k);
-        for (size_t j = 0; j < augmentedMatrix.cols(); ++j) {
-            augmentedMatrix(k, j) /= pivot;
+        for (size_t col = 0; col < colLength; ++col) {
+            augmentedMatrix(k, col) /= pivot;
         }
 
-        for (size_t i = 0; i < augmentedMatrix.rows(); ++i) {
-            if (i != k && i % size == rank) {
-                double scale = augmentedMatrix(i, k);
-                augmentedMatrix.getRowSlice(i) -= augmentedMatrix.getRowCopy(k) * scale;
+        for (size_t r = 0; r < rowLength; ++r) {
+            if (r != k && r % size == rank) {
+                double scale = augmentedMatrix(r, k);
+                augmentedMatrix.getRowSlice(r) -= augmentedMatrix.getRowCopy(k) * scale;
             }
         }
     }
@@ -147,40 +148,11 @@ void invertParallel(Matrix &mat) {
     delete[] recvArray;
 }
 
-void rebuildMatrix(Matrix &mat, size_t matrixDimension, const MatrixConcatCols &augmentedMatrix, int size,
-                   const double *recvArray) {
-    size_t process, row, column;
-    for (size_t i = 0; i < size * matrixDimension; i++) {
-        process = i / (matrixDimension);
-        row = (i % (matrixDimension) / augmentedMatrix.rows());
-        column = (i % (mat.rows()));
-        if (row % size == process) {
-            mat.getDataArray()[(row * augmentedMatrix.rows()) + column] = recvArray[i];
-        }
-    }
-}
-
-void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, int k) {
-    if (augmentedMatrix(p, k) == 0) {
-        throw runtime_error("Matrix not invertible");
-    }
-}
-
-Matrix multiplyMatrix(const Matrix &iMat1, const Matrix &iMat2) {
-    assert(iMat1.cols() == iMat2.rows());
-    Matrix lRes(iMat1.rows(), iMat2.cols());
-    for (size_t i = 0; i < lRes.rows(); ++i) {
-        for (size_t j = 0; j < lRes.cols(); ++j) {
-            lRes(i, j) = (iMat1.getRowCopy(i) * iMat2.getColumnCopy(j)).sum();
-        }
-    }
-    return lRes;
-}
 
 int main(int argc, char **argv) {
     srand((unsigned) time(nullptr));
 
-    unsigned int matrixDimension = 5;
+    int matrixDimension = 5;
     if (argc == 2) {
         matrixDimension = atoi(argv[1]);
     }
@@ -260,4 +232,34 @@ double *convertValArrayToDouble(valarray<double> array) {
     auto *newArray = new double[array.size()];
     copy(begin(array), end(array), newArray);
     return newArray;
+}
+
+void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, size_t k) {
+    if (augmentedMatrix(p, k) == 0) {
+        throw runtime_error("Matrix not invertible");
+    }
+}
+
+void rebuildMatrix(Matrix &mat, size_t matrixDimension, const MatrixConcatCols &augmentedMatrix, int size,
+                   const double *recvArray) {
+    size_t process, row, column;
+    for (size_t i = 0; i < size * matrixDimension; i++) {
+        process = i / (matrixDimension);
+        row = (i % (matrixDimension) / augmentedMatrix.rows());
+        column = (i % (mat.rows()));
+        if (row % size == process) {
+            mat.getDataArray()[(row * augmentedMatrix.rows()) + column] = recvArray[i];
+        }
+    }
+}
+
+Matrix multiplyMatrix(const Matrix &iMat1, const Matrix &iMat2) {
+    assert(iMat1.cols() == iMat2.rows());
+    Matrix lRes(iMat1.rows(), iMat2.cols());
+    for (size_t i = 0; i < lRes.rows(); ++i) {
+        for (size_t j = 0; j < lRes.cols(); ++j) {
+            lRes(i, j) = (iMat1.getRowCopy(i) * iMat2.getColumnCopy(j)).sum();
+        }
+    }
+    return lRes;
 }
