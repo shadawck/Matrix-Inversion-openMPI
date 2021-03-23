@@ -36,7 +36,7 @@ void invertSequential(Matrix &mat) {
 
         size_t pivot;
         findPivot(row, augmentedMatrix, pivot);
-        checkSingularity(augmentedMatrix,pivot,row);
+        checkSingularity(augmentedMatrix, pivot, row);
 
         // échanger la index courante avec celle du pivot
         if (pivot != row) augmentedMatrix.swapRows(pivot, row);
@@ -77,13 +77,13 @@ void invertParallel(Matrix &mat) {
 
     for (int k = 0; k < mat.rows(); ++k) {
         size_t locPivot = k;
-        double lMax = std::numeric_limits<double>::lowest();
+        double lMax = numeric_limits<double>::lowest();
+
         for (size_t i = k; i < augmentedMatrix.rows(); i++) {
-            if (i % (size) == (unsigned) rank) {
-                if (fabs(augmentedMatrix(i, k)) > lMax) {
-                    lMax = fabs(augmentedMatrix(i, k));
-                    locPivot = i;
-                }
+            double lp = fabs(augmentedMatrix(i, k));
+            if ((i % (size) == (unsigned) rank) && (lp > lMax)) {
+                lMax = lp;
+                locPivot = i;
             }
         }
         send.value = lMax;
@@ -115,11 +115,9 @@ void invertParallel(Matrix &mat) {
         }
 
         for (size_t i = 0; i < augmentedMatrix.rows(); ++i) {
-            if (i != k) {
-                if (i % size == (unsigned) rank) {
-                    double scale = augmentedMatrix(i, k);
-                    augmentedMatrix.getRowSlice(i) -= augmentedMatrix.getRowCopy(k) * scale;
-                }
+            if (i != k && i % size == (unsigned) rank) {
+                double scale = augmentedMatrix(i, k);
+                augmentedMatrix.getRowSlice(i) -= augmentedMatrix.getRowCopy(k) * scale;
             }
         }
     }
