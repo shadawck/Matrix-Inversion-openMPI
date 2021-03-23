@@ -16,6 +16,9 @@ double *convertValArrayToDouble(valarray<double> array);
 
 void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, int k);
 
+void rebuildMatrix(Matrix &mat, size_t matrixDimension, const MatrixConcatCols &augmentedMatrix, int size,
+                   const double *recvArray);
+
 struct {
     double value;
     int index;
@@ -61,9 +64,9 @@ void invertSequential(Matrix &mat) {
     splitAugmentedMatrix(mat, augmentedMatrix);
 }
 
-/** NAIVE IMPLEMENTATION
- * Inverser la matrice par la méthode de Gauss-Jordan; implantation MPI parallèle.
- * @param mat
+/**
+ * Invert matrix with Gauss Jordan method
+ * @param mat Original matrix
  */
 void invertParallel(Matrix &mat) {
     assert(mat.rows() == mat.cols());
@@ -78,10 +81,10 @@ void invertParallel(Matrix &mat) {
     for (int k = 0; k < mat.rows(); ++k) {
         size_t locPivot = k;
         double lMax = numeric_limits<double>::lowest();
-
+        double lp;
         for (size_t i = k; i < augmentedMatrix.rows(); i++) {
-            double lp = fabs(augmentedMatrix(i, k));
-            if ((i % (size) == (unsigned) rank) && (lp > lMax)) {
+            lp = fabs(augmentedMatrix(i, k));
+            if ((i % (size) == rank) && (lp > lMax)) {
                 lMax = lp;
                 locPivot = i;
             }
@@ -93,7 +96,6 @@ void invertParallel(Matrix &mat) {
 
         double *rowMaxArray = convertValArrayToDouble(augmentedMatrix.getRowCopy(recv.index));
         double *rowKArray = convertValArrayToDouble(augmentedMatrix.getRowCopy(k));
-
         MPI_Bcast(rowMaxArray, colLength, MPI_DOUBLE, recv.index % size, MPI_COMM_WORLD);
         MPI_Bcast(rowKArray, colLength, MPI_DOUBLE, k % size, MPI_COMM_WORLD);
 
@@ -107,7 +109,9 @@ void invertParallel(Matrix &mat) {
 
         checkSingularity(augmentedMatrix, locPivot, k);
 
-        if (recv.index != k) augmentedMatrix.swapRows(recv.index, k);
+        if (recv.index != k) {
+            augmentedMatrix.swapRows(recv.index, k);
+        }
 
         double pivot = augmentedMatrix(k, k);
         for (size_t j = 0; j < augmentedMatrix.cols(); ++j) {
@@ -115,39 +119,45 @@ void invertParallel(Matrix &mat) {
         }
 
         for (size_t i = 0; i < augmentedMatrix.rows(); ++i) {
-            if (i != k && i % size == (unsigned) rank) {
+            if (i != k && i % size == rank) {
                 double scale = augmentedMatrix(i, k);
                 augmentedMatrix.getRowSlice(i) -= augmentedMatrix.getRowCopy(k) * scale;
             }
         }
     }
 
-    // On copie la partie droite de la matrice AI ainsi transformée dans la matrice courante (this).
     splitAugmentedMatrix(mat, augmentedMatrix);
 
-    auto *recvArray = (double *) malloc(size * mat.rows() * mat.rows() * sizeof(double));
     MPI_Barrier(MPI_COMM_WORLD);
+    auto *recvArray = (double *) malloc(size * mat.rows() * mat.rows() * sizeof(double));
+    double *sendArray = convertValArrayToDouble(mat.getDataArray());
 
-    double *sendBuf = convertValArrayToDouble(mat.getDataArray());
-
-    // gather matrix from each proccess
-    MPI_Gather(sendBuf, matrixDimension, MPI_DOUBLE, recvArray, matrixDimension, MPI_DOUBLE, ROOT_PROCESS,
+    // gather matrix from each process
+    MPI_Gather(sendArray, matrixDimension, MPI_DOUBLE,
+               recvArray, matrixDimension, MPI_DOUBLE,
+               ROOT_PROCESS,
                MPI_COMM_WORLD);
 
     // rebuild inverse matrix
     if (rank == 0) {
-        size_t process, row, column;
-        for (size_t i = 0; i < size * augmentedMatrix.rows() * augmentedMatrix.rows(); i++) {
-            process = i / (augmentedMatrix.rows() * augmentedMatrix.rows());
-            row = (i % (augmentedMatrix.rows() * augmentedMatrix.rows()) / augmentedMatrix.rows());
-            column = (i % (mat.rows()));
-            if (row % size == process) {
-                mat.getDataArray()[(row * augmentedMatrix.rows()) + column] = recvArray[i];
-            }
-        }
+        rebuildMatrix(mat, matrixDimension, augmentedMatrix, size, recvArray);
     }
 
-    delete[] sendBuf;
+    delete[] sendArray;
+    delete[] recvArray;
+}
+
+void rebuildMatrix(Matrix &mat, size_t matrixDimension, const MatrixConcatCols &augmentedMatrix, int size,
+                   const double *recvArray) {
+    size_t process, row, column;
+    for (size_t i = 0; i < size * matrixDimension; i++) {
+        process = i / (matrixDimension);
+        row = (i % (matrixDimension) / augmentedMatrix.rows());
+        column = (i % (mat.rows()));
+        if (row % size == process) {
+            mat.getDataArray()[(row * augmentedMatrix.rows()) + column] = recvArray[i];
+        }
+    }
 }
 
 void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, int k) {
