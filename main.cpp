@@ -223,14 +223,14 @@ int main(int argc, char **argv) {
 
     if (rank == 0) {
         cout << "ORIGINAL MATRIX" << endl;
-        cout << copyRandomMatrix.str() << endl;
-
+//        cout << copyRandomMatrix.str() << endl;
+//
         cout << "PARALLEL EXECUTION" << endl;
-        cout << "Matrice inverse:\n" << parMatrix.str() << endl;
-        Matrix lRes = multiplyMatrix(parMatrix, copyRandomMatrix);
-        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
-
-        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
+//        cout << "Matrice inverse:\n" << parMatrix.str() << endl;
+//        Matrix lRes = multiplyMatrix(parMatrix, copyRandomMatrix);
+//        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
+//
+//        cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
         cout << "Total parallel execution time : " << cronParEnd - cronParStart << endl;
     }
 
