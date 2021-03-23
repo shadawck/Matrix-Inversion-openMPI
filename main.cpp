@@ -6,14 +6,22 @@
 #include <openmpi/mpi.h>
 #include <unistd.h>
 
-void findPivot(size_t row, MatrixConcatCols &augmentedMatrix, size_t &pivot);
+using namespace std;
 
-void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t row, size_t pivot);
+void findPivot(size_t row, MatrixConcatCols &augmentedMatrix, size_t &pivot);
 
 void splitAugmentedMatrix(Matrix &mat, MatrixConcatCols &augmentedMatrix);
 
-using namespace std;
-int ROOT_PROCESS = 0;
+double *convertValArrayToDouble(valarray<double> array);
+
+void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, int k);
+
+struct {
+    double value;
+    int index;
+} send, recv;
+
+const unsigned int ROOT_PROCESS = 0;
 
 /**
  * Inverser la matrice par la méthode de Gauss-Jordan; implantation séquentielle.
@@ -28,59 +36,29 @@ void invertSequential(Matrix &mat) {
 
         size_t pivot;
         findPivot(row, augmentedMatrix, pivot);
-        if (augmentedMatrix(pivot, row) == 0) throw runtime_error("Matrix not invertible");
+        checkSingularity(augmentedMatrix,pivot,row);
 
-        // échanger la ligne courante avec celle du pivot
+        // échanger la index courante avec celle du pivot
         if (pivot != row) augmentedMatrix.swapRows(pivot, row);
 
         double pivotValue = augmentedMatrix(row, row);
 
         for (size_t col = 0; col < augmentedMatrix.cols(); ++col) {
-            // On divise les éléments de la rangée row par la valeur du pivot.
-            // Ainsi, augmentedMatrix(row,row) deviendra égal à 1.
+            // On divise les éléments de la rangée index par la valeur du pivot.
+            // Ainsi, augmentedMatrix(index,index) deviendra égal à 1.
             augmentedMatrix(row, col) /= pivotValue;
         }
 
-        // Pour chaque rangée...
-        for (size_t i = 0; i < augmentedMatrix.rows(); ++i) {
-            if (i != row) { // ...différente de row
+        for (size_t i = 0; i < augmentedMatrix.rows(); ++i) {         // Pour chaque rangée...
+            if (i != row) { // ...différente de index
                 double llValue = augmentedMatrix(i, row);
-                // On soustrait la rangée row multipliée par l'élément row de la rangée courante
+                // On soustrait la rangée index multipliée par l'élément index de la rangée courante
                 augmentedMatrix.getRowSlice(i) -= augmentedMatrix.getRowCopy(row) * llValue;
             }
         }
     }
     // On copie la partie droite de la matrice AI ainsi transformée dans la matrice courante (this).
     splitAugmentedMatrix(mat, augmentedMatrix);
-}
-
-void splitAugmentedMatrix(Matrix &mat, MatrixConcatCols &augmentedMatrix) {
-    for (unsigned int i = 0; i < mat.rows(); ++i) {
-        mat.getRowSlice(i) = augmentedMatrix.getDataArray()[slice(i * augmentedMatrix.cols() + mat.cols(), mat.cols(),
-                                                                  1)];
-    }
-}
-
-void findPivot(size_t row, MatrixConcatCols &augmentedMatrix, size_t &pivot) {
-    pivot = row;
-    double lMax = fabs(augmentedMatrix(row, row));
-    for (size_t i = row; i < augmentedMatrix.rows(); ++i) {
-        if (fabs(augmentedMatrix(i, row)) > lMax) {
-            lMax = fabs(augmentedMatrix(i, row));
-            pivot = i;
-        }
-    }
-}
-
-struct {
-    double val;
-    int ligne;
-} send, recv;
-
-double *convertValArrayToDouble(valarray<double> array) {
-    auto *newArray = new double[array.size()];
-    copy(begin(array), end(array), newArray);
-    return newArray;
 }
 
 /** NAIVE IMPLEMENTATION
@@ -90,7 +68,6 @@ double *convertValArrayToDouble(valarray<double> array) {
 void invertParallel(Matrix &mat) {
     assert(mat.rows() == mat.cols());
     size_t matrixDimension = mat.rows() * mat.rows();
-    size_t rowLength = mat.rows();
 
     MatrixConcatCols augmentedMatrix(mat, MatrixIdentity(mat.rows()));
     size_t colLength = augmentedMatrix.cols();
@@ -99,40 +76,38 @@ void invertParallel(Matrix &mat) {
     int size = MPI::COMM_WORLD.Get_size();
 
     for (int k = 0; k < mat.rows(); ++k) {
-        size_t p = k;
+        size_t locPivot = k;
         double lMax = std::numeric_limits<double>::lowest();
         for (size_t i = k; i < augmentedMatrix.rows(); i++) {
             if (i % (size) == (unsigned) rank) {
                 if (fabs(augmentedMatrix(i, k)) > lMax) {
                     lMax = fabs(augmentedMatrix(i, k));
-                    p = i;
+                    locPivot = i;
                 }
             }
         }
-        send.val = lMax;
-        send.ligne = p;
+        send.value = lMax;
+        send.index = locPivot;
 
         MPI_Allreduce(&send, &recv, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
 
-        double *rowMaxArray = convertValArrayToDouble(augmentedMatrix.getRowCopy(recv.ligne));
+        double *rowMaxArray = convertValArrayToDouble(augmentedMatrix.getRowCopy(recv.index));
         double *rowKArray = convertValArrayToDouble(augmentedMatrix.getRowCopy(k));
 
-        MPI_Bcast(rowMaxArray, colLength, MPI_DOUBLE, recv.ligne % size, MPI_COMM_WORLD);
+        MPI_Bcast(rowMaxArray, colLength, MPI_DOUBLE, recv.index % size, MPI_COMM_WORLD);
         MPI_Bcast(rowKArray, colLength, MPI_DOUBLE, k % size, MPI_COMM_WORLD);
 
         for (size_t i = 0; i < colLength; i++) {
-            augmentedMatrix(recv.ligne, i) = rowMaxArray[i];
+            augmentedMatrix(recv.index, i) = rowMaxArray[i];
             augmentedMatrix(k, i) = rowKArray[i];
         }
 
         delete[] rowMaxArray;
+        delete[] rowKArray;
 
-        if (augmentedMatrix(p, k) == 0) {
-            throw runtime_error("Matrix not invertible");
-        }
+        checkSingularity(augmentedMatrix, locPivot, k);
 
-
-        if (recv.ligne != k) augmentedMatrix.swapRows(recv.ligne, k);
+        if (recv.index != k) augmentedMatrix.swapRows(recv.index, k);
 
         double pivot = augmentedMatrix(k, k);
         for (size_t j = 0; j < augmentedMatrix.cols(); ++j) {
@@ -150,10 +125,7 @@ void invertParallel(Matrix &mat) {
     }
 
     // On copie la partie droite de la matrice AI ainsi transformée dans la matrice courante (this).
-    for (unsigned int i = 0; i < mat.rows(); ++i) {
-        mat.getRowSlice(i) = augmentedMatrix.getDataArray()[slice(i * augmentedMatrix.cols() + mat.cols(), mat.cols(),
-                                                                  1)];
-    }
+    splitAugmentedMatrix(mat, augmentedMatrix);
 
     auto *recvArray = (double *) malloc(size * mat.rows() * mat.rows() * sizeof(double));
     MPI_Barrier(MPI_COMM_WORLD);
@@ -180,11 +152,17 @@ void invertParallel(Matrix &mat) {
     delete[] sendBuf;
 }
 
+void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, int k) {
+    if (augmentedMatrix(p, k) == 0) {
+        throw runtime_error("Matrix not invertible");
+    }
+}
+
 // Multiplier deux matrices.
 Matrix multiplyMatrix(const Matrix &iMat1, const Matrix &iMat2) {
     assert(iMat1.cols() == iMat2.rows());
     Matrix lRes(iMat1.rows(), iMat2.cols());
-    for (size_t i = 0; i < lRes.rows(); ++i) { /// row
+    for (size_t i = 0; i < lRes.rows(); ++i) { /// index
         for (size_t j = 0; j < lRes.cols(); ++j) { /// column
             lRes(i, j) = (iMat1.getRowCopy(i) * iMat2.getColumnCopy(j)).sum();
         }
@@ -240,12 +218,12 @@ int main(int argc, char **argv) {
 
     if (rank == 0) {
         cout << "ORIGINAL MATRIX" << endl;
-//        cout << copyRandomMatrix.str() << endl;
-//
-//        cout << "PARALLEL EXECUTION" << endl;
-//        cout << "Matrice inverse:\n" << parMatrix.str() << endl;
+        cout << copyRandomMatrix.str() << endl;
+
+        cout << "PARALLEL EXECUTION" << endl;
+        cout << "Matrice inverse:\n" << parMatrix.str() << endl;
         Matrix lRes = multiplyMatrix(parMatrix, copyRandomMatrix);
-//        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
+        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
 
         cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
         cout << "Total parallel execution time : " << chronoParEnd - chronoParStart << endl;
@@ -254,4 +232,29 @@ int main(int argc, char **argv) {
     MPI_Finalize();
 
     return 0;
+}
+
+
+void splitAugmentedMatrix(Matrix &mat, MatrixConcatCols &augmentedMatrix) {
+    for (unsigned int i = 0; i < mat.rows(); ++i) {
+        mat.getRowSlice(i) = augmentedMatrix.getDataArray()[slice(i * augmentedMatrix.cols() + mat.cols(), mat.cols(),
+                                                                  1)];
+    }
+}
+
+void findPivot(size_t row, MatrixConcatCols &augmentedMatrix, size_t &pivot) {
+    pivot = row;
+    double lMax = fabs(augmentedMatrix(row, row));
+    for (size_t i = row; i < augmentedMatrix.rows(); ++i) {
+        if (fabs(augmentedMatrix(i, row)) > lMax) {
+            lMax = fabs(augmentedMatrix(i, row));
+            pivot = i;
+        }
+    }
+}
+
+double *convertValArrayToDouble(valarray<double> array) {
+    auto *newArray = new double[array.size()];
+    copy(begin(array), end(array), newArray);
+    return newArray;
 }
