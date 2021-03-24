@@ -19,7 +19,6 @@ void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, size_t 
 
 void rebuildMatrix(Matrix &mat, size_t matrixDimension, const MatrixConcatCols &augmentedMatrix, int size,
                    const double *recvArray);
-
 Matrix multiplyMatrix(const Matrix &iMat1, const Matrix &iMat2);
 
 void printResult(int matrixDimension, double totalPar, Matrix &lRes);
@@ -72,7 +71,6 @@ void invertSequential(Matrix &mat) {
 
 std::string convertirArrayEnString(double *tablo, int size) {
     std::ostringstream oss;
-    oss.precision(2);
     oss << "[";
     for (int i = 0; i < size; i++)
         oss << tablo[i] << ", ";
@@ -147,37 +145,52 @@ void invertParallel(Matrix &mat) {
 
     splitAugmentedMatrix(mat, augmentedMatrix);
 
-//    cout << "rank " << rank << " " << mat.str() << endl;
-    for (int i = 0; i < mat.rows(); ++i) {
-        if (rank == i%size) {
-            for (int p = 0; p < mat.rows(); p++) {
-                cout << "Iteration : " << i << " et rank " << rank << " : "
-                     << convertValArrayToDouble(mat.getRowCopy((mat.cols() * i + i) % mat.cols()))[p] << " ";
-            }
+    double* processRow;
+    for (int i = 0; i < mat.rows(); i++) {
+        if (rank == i % size) {
+            cout << "SENDING " << i << "ROW" << endl;
+            processRow = convertValArrayToDouble(mat.getRowCopy((mat.cols() * i + i) % mat.cols()));
+            MPI_Send(processRow, rowLength, MPI_DOUBLE, ROOT_PROCESS, 1, MPI_COMM_WORLD);
+            cout << "SEND" << endl;
         }
-        cout << endl;
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
-    auto *recvArray = (double *) malloc(size * mat.rows() * mat.rows() * sizeof(double));
-    double *sendArray = convertValArrayToDouble(mat.getDataArray());
-
-    // gather matrix from each process
-    MPI_Gather(sendArray, matrixDimension, MPI_DOUBLE,
-               recvArray, matrixDimension, MPI_DOUBLE,
-               ROOT_PROCESS,
-               MPI_COMM_WORLD);
-
-
-    // rebuild inverse matrix
+    cout << "rank" << rank << endl;
+    MPI_Status mpiStatus;
     if (rank == 0) {
-        rebuildMatrix(mat, matrixDimension, augmentedMatrix, size, recvArray);
-        cout << "Matrix" << endl;
-        cout << mat.str() << endl;
+        for (int i = 0; i < mat.rows(); i++) {
+            cout << "RECEIVING " << i << "ROW" << endl;
+            MPI_Recv(&mat.getDataArray()[i * mat.rows()], rowLength, MPI_DOUBLE, i % size, 1, MPI_COMM_WORLD, &mpiStatus);
+            cout << "RECEIVED" << endl;
+        }
     }
-
-    delete[] sendArray;
-    delete[] recvArray;
+//
+//    MPI_Barrier(MPI_COMM_WORLD);
+//
+//
+//    if(rank == 0)
+//        cout <<  mat.str() << endl;
+//
+//    auto *recvArray = (double *) malloc(size * mat.rows() * mat.rows() * sizeof(double));
+//    double *sendArray = convertValArrayToDouble(mat.getDataArray());
+//
+//    // gather matrix from each process
+//    MPI_Gather(sendArray, matrixDimension, MPI_DOUBLE,
+//               recvArray, matrixDimension, MPI_DOUBLE,
+//               ROOT_PROCESS,
+//               MPI_COMM_WORLD);
+//
+//
+//    // rebuild inverse matrix
+//    if (rank == 0) {
+//        rebuildMatrix(mat, matrixDimension, augmentedMatrix, size, recvArray);
+//        cout << "Matrix" << endl;
+//        cout << mat.str() << endl;
+//    }
+//
+//    delete[] sendArray;
+//    delete[] recvArray;
 }
 
 
