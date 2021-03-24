@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <openmpi/mpi.h>
 #include <unistd.h>
+#include <sstream>
 
 using namespace std;
 
@@ -27,6 +28,7 @@ struct {
     double value;
     size_t index;
 } send, recv;
+
 
 const unsigned int ROOT_PROCESS = 0;
 
@@ -68,6 +70,17 @@ void invertSequential(Matrix &mat) {
     splitAugmentedMatrix(mat, augmentedMatrix);
 }
 
+std::string convertirArrayEnString(double *tablo, int size) {
+    std::ostringstream oss;
+    oss.precision(2);
+    oss << "[";
+    for (int i = 0; i < size; i++)
+        oss << tablo[i] << ", ";
+    oss << "]";
+    return oss.str();
+}
+
+
 /**
  * Invert matrix with Gauss Jordan method
  * @param mat Original matrix
@@ -94,6 +107,7 @@ void invertParallel(Matrix &mat) {
                 locPivot = i;
             }
         }
+
         send.value = lMax;
         send.index = locPivot;
 
@@ -101,11 +115,11 @@ void invertParallel(Matrix &mat) {
 
         double *rowMaxArray = convertValArrayToDouble(augmentedMatrix.getRowCopy(recv.index));
         double *rowKArray = convertValArrayToDouble(augmentedMatrix.getRowCopy(k));
-        MPI_Bcast(rowMaxArray, colLength, MPI_DOUBLE, recv.index % size, MPI_COMM_WORLD);
+        MPI_Bcast(rowMaxArray, colLength, MPI_DOUBLE, (int) recv.index % size, MPI_COMM_WORLD);
         MPI_Bcast(rowKArray, colLength, MPI_DOUBLE, (int) k % size, MPI_COMM_WORLD);
 
         for (size_t i = 0; i < colLength; i++) {
-            augmentedMatrix(recv.index, i) = rowMaxArray[i];
+            augmentedMatrix(recv.index, i) = rowMaxArray[i]; //
             augmentedMatrix(k, i) = rowKArray[i];
         }
 
@@ -133,6 +147,17 @@ void invertParallel(Matrix &mat) {
 
     splitAugmentedMatrix(mat, augmentedMatrix);
 
+//    cout << "rank " << rank << " " << mat.str() << endl;
+    for (int i = 0; i < mat.rows(); ++i) {
+        if (rank == i%size) {
+            for (int p = 0; p < mat.rows(); p++) {
+                cout << "Iteration : " << i << " et rank " << rank << " : "
+                     << convertValArrayToDouble(mat.getRowCopy((mat.cols() * i + i) % mat.cols()))[p] << " ";
+            }
+        }
+        cout << endl;
+    }
+
     MPI_Barrier(MPI_COMM_WORLD);
     auto *recvArray = (double *) malloc(size * mat.rows() * mat.rows() * sizeof(double));
     double *sendArray = convertValArrayToDouble(mat.getDataArray());
@@ -143,9 +168,12 @@ void invertParallel(Matrix &mat) {
                ROOT_PROCESS,
                MPI_COMM_WORLD);
 
+
     // rebuild inverse matrix
     if (rank == 0) {
         rebuildMatrix(mat, matrixDimension, augmentedMatrix, size, recvArray);
+        cout << "Matrix" << endl;
+        cout << mat.str() << endl;
     }
 
     delete[] sendArray;
@@ -173,13 +201,12 @@ int main(int argc, char **argv) {
     * sequential execution
     */
     if (rank == 0) {
-        double cronSeqStart, cronSeqEnd;
         cout << "--- SEQUENTIAL EXECUTION ---" << endl;
         Matrix seqMatrix(randomMatrix);
 
-        cronSeqStart = MPI_Wtime();
+        double cronSeqStart = MPI_Wtime();
         invertSequential(seqMatrix);
-        cronSeqEnd = MPI_Wtime();
+        double cronSeqEnd = MPI_Wtime();
         double totalSeq = cronSeqEnd - cronSeqStart;
 
         Matrix lResSeq = multiplyMatrix(seqMatrix, copyRandomMatrix);
@@ -208,7 +235,7 @@ int main(int argc, char **argv) {
 void printResult(int matrixDimension, double totalPar, Matrix &lRes) {
     cout << "Matrix dimension : " << matrixDimension << endl;
     cout << "Erreur: " << lRes.getDataArray().sum() - matrixDimension << endl;
-    cout << "Total parallel execution time : " << totalPar << endl;
+    cout << "Total execution time : " << totalPar << endl;
 }
 
 void splitAugmentedMatrix(Matrix &mat, MatrixConcatCols &augmentedMatrix) {
