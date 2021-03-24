@@ -1,6 +1,6 @@
-## Inversion de matrice n par n avec openMPI
+## Matrix inversion with openMPI
 
 ### Prog
 ```shell
->> mpirun -np <processNumber> pp_tp3
+>> mpirun -np <processNumber> pp_tp3 <MatrixDimension>
 ```
