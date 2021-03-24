@@ -5,7 +5,6 @@
 #include <stdexcept>
 #include <openmpi/mpi.h>
 #include <unistd.h>
-#include <sstream>
 
 using namespace std;
 
@@ -17,8 +16,6 @@ double *convertValArrayToDouble(valarray<double> array);
 
 void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, size_t k);
 
-void rebuildMatrix(Matrix &mat, size_t matrixDimension, const MatrixConcatCols &augmentedMatrix, int size,
-                   const double *recvArray);
 Matrix multiplyMatrix(const Matrix &iMat1, const Matrix &iMat2);
 
 void printResult(int matrixDimension, double totalPar, Matrix &lRes);
@@ -69,29 +66,18 @@ void invertSequential(Matrix &mat) {
     splitAugmentedMatrix(mat, augmentedMatrix);
 }
 
-std::string convertirArrayEnString(double *tablo, int size) {
-    std::ostringstream oss;
-    oss << "[";
-    for (int i = 0; i < size; i++)
-        oss << tablo[i] << ", ";
-    oss << "]";
-    return oss.str();
-}
-
-
 /**
  * Invert matrix with Gauss Jordan method
  * @param mat Original matrix
  */
 void invertParallel(Matrix &mat) {
     assert(mat.rows() == mat.cols());
-    size_t matrixDimension = mat.rows() * mat.rows();
 
     MatrixConcatCols augmentedMatrix(mat, MatrixIdentity(mat.rows()));
     size_t rowLength = augmentedMatrix.rows();
     size_t colLength = augmentedMatrix.cols();
 
-    int rank = MPI::COMM_WORLD.Get_rank();
+    size_t rank = MPI::COMM_WORLD.Get_rank();
     int size = MPI::COMM_WORLD.Get_size();
 
     for (size_t k = 0; k < mat.rows(); ++k) {
@@ -117,7 +103,7 @@ void invertParallel(Matrix &mat) {
         MPI_Bcast(rowKArray, colLength, MPI_DOUBLE, (int) k % size, MPI_COMM_WORLD);
 
         for (size_t i = 0; i < colLength; i++) {
-            augmentedMatrix(recv.index, i) = rowMaxArray[i]; //
+            augmentedMatrix(recv.index, i) = rowMaxArray[i];
             augmentedMatrix(k, i) = rowKArray[i];
         }
 
@@ -145,54 +131,26 @@ void invertParallel(Matrix &mat) {
 
     splitAugmentedMatrix(mat, augmentedMatrix);
 
-    double* processRow;
-    for (int i = 0; i < mat.rows(); i++) {
+    double *processRow;
+    for (size_t i = 0; i < rowLength; i++) {
         /* Pointless to send data to root if you're already root :) */
         if (rank != 0 && rank == i % size) {
-            processRow = convertValArrayToDouble(mat.getRowCopy((mat.cols() * i + i) % mat.cols()));
-            MPI_Send(processRow, rowLength, MPI_DOUBLE, ROOT_PROCESS, 1, MPI_COMM_WORLD);
+            processRow = convertValArrayToDouble(mat.getRowCopy((rowLength * i + i) % rowLength));
+            MPI_Send(processRow, rowLength, MPI_DOUBLE, ROOT_PROCESS, i, MPI_COMM_WORLD);
         }
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    cout << "rank" << rank << endl;
     MPI_Status mpiStatus;
     if (rank == 0) {
-        for (int i = 0; i < mat.rows(); i++) {
+        for (size_t i = 0; i < rowLength; i++) {
             /* Pointless to try to receive data if your mat is already updated */
-            if(i%size != 0) {
-                MPI_Recv(&mat.getDataArray()[i * mat.rows()], rowLength, MPI_DOUBLE, i % size, MPI_ANY_TAG, MPI_COMM_WORLD, &mpiStatus);
+            if (i % size != 0) {
+                MPI_Recv(&mat.getDataArray()[i * mat.rows()], rowLength, MPI_DOUBLE, i % size, MPI_ANY_TAG,
+                         MPI_COMM_WORLD, &mpiStatus);
             }
         }
     }
-//
-//    MPI_Barrier(MPI_COMM_WORLD);
-//
-//
-//    if(rank == 0)
-//        cout <<  mat.str() << endl;
-//
-//    auto *recvArray = (double *) malloc(size * mat.rows() * mat.rows() * sizeof(double));
-//    double *sendArray = convertValArrayToDouble(mat.getDataArray());
-//
-//    // gather matrix from each process
-//    MPI_Gather(sendArray, matrixDimension, MPI_DOUBLE,
-//               recvArray, matrixDimension, MPI_DOUBLE,
-//               ROOT_PROCESS,
-//               MPI_COMM_WORLD);
-//
-//
-//    // rebuild inverse matrix
-//    if (rank == 0) {
-//        rebuildMatrix(mat, matrixDimension, augmentedMatrix, size, recvArray);
-//        cout << "Matrix" << endl;
-//        cout << mat.str() << endl;
-//    }
-//
-//    delete[] sendArray;
-//    delete[] recvArray;
 }
-
 
 int main(int argc, char **argv) {
     srand((unsigned) time(nullptr));
@@ -252,7 +210,7 @@ void printResult(int matrixDimension, double totalPar, Matrix &lRes) {
 }
 
 void splitAugmentedMatrix(Matrix &mat, MatrixConcatCols &augmentedMatrix) {
-    for (unsigned int i = 0; i < mat.rows(); ++i) {
+    for (size_t i = 0; i < mat.rows(); ++i) {
         mat.getRowSlice(i) = augmentedMatrix.getDataArray()[slice(i * augmentedMatrix.cols() + mat.cols(), mat.cols(),
                                                                   1)];
     }
@@ -277,20 +235,7 @@ double *convertValArrayToDouble(valarray<double> array) {
 
 void checkSingularity(const MatrixConcatCols &augmentedMatrix, size_t p, size_t k) {
     if (augmentedMatrix(p, k) == 0) {
-        throw runtime_error("Matrix not invertible");
-    }
-}
-
-void rebuildMatrix(Matrix &mat, size_t matrixDimension, const MatrixConcatCols &augmentedMatrix, int size,
-                   const double *recvArray) {
-    size_t process, row, column;
-    for (size_t i = 0; i < size * matrixDimension; i++) {
-        process = i / (matrixDimension);
-        row = (i % (matrixDimension) / augmentedMatrix.rows());
-        column = (i % (mat.rows()));
-        if (row % size == process) {
-            mat.getDataArray()[(row * augmentedMatrix.rows()) + column] = recvArray[i];
-        }
+        throw runtime_error("Matrix is not invertible");
     }
 }
 
