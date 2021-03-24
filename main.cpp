@@ -147,11 +147,10 @@ void invertParallel(Matrix &mat) {
 
     double* processRow;
     for (int i = 0; i < mat.rows(); i++) {
-        if (rank == i % size) {
-            cout << "SENDING " << i << "ROW" << endl;
+        /* Pointless to send data to root if you're already root :) */
+        if (rank != 0 && rank == i % size) {
             processRow = convertValArrayToDouble(mat.getRowCopy((mat.cols() * i + i) % mat.cols()));
             MPI_Send(processRow, rowLength, MPI_DOUBLE, ROOT_PROCESS, 1, MPI_COMM_WORLD);
-            cout << "SEND" << endl;
         }
     }
 
@@ -160,9 +159,10 @@ void invertParallel(Matrix &mat) {
     MPI_Status mpiStatus;
     if (rank == 0) {
         for (int i = 0; i < mat.rows(); i++) {
-            cout << "RECEIVING " << i << "ROW" << endl;
-            MPI_Recv(&mat.getDataArray()[i * mat.rows()], rowLength, MPI_DOUBLE, i % size, 1, MPI_COMM_WORLD, &mpiStatus);
-            cout << "RECEIVED" << endl;
+            /* Pointless to try to receive data if your mat is already updated */
+            if(i%size != 0) {
+                MPI_Recv(&mat.getDataArray()[i * mat.rows()], rowLength, MPI_DOUBLE, i % size, MPI_ANY_TAG, MPI_COMM_WORLD, &mpiStatus);
+            }
         }
     }
 //
